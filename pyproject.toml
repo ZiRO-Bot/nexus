@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "dashboard-backend"
+version = "0.0.1"
+description = "Backend for Z3R0's dashboard"
+authors = ["Name <you@example.com>"]
+license = "AGPLv3.0"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "0.92.0"
+"discord.py" = "2.2"
+pyzmq = "25.0.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
