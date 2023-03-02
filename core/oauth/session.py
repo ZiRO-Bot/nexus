@@ -4,14 +4,13 @@ import asyncio
 import logging
 from typing import Any, Dict, Tuple
 
-from oauthlib.common import generate_token, urldecode
-from oauthlib.oauth2 import WebApplicationClient, InsecureTransportError
-from oauthlib.oauth2 import LegacyApplicationClient
-from oauthlib.oauth2 import TokenExpiredError, is_secure_transport
 import aiohttp
+from oauthlib.common import generate_token, urldecode
+from oauthlib.oauth2 import (InsecureTransportError, LegacyApplicationClient,
+                             TokenExpiredError, WebApplicationClient,
+                             is_secure_transport)
 
-from core.oauth.models import User, Guild
-
+from core.oauth.models import Guild, User
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class OAuth2Session(aiohttp.ClientSession):
         token=None,
         state=None,
         token_updater=None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Construct a new OAuth 2 client session.
         :param client_id: Client id obtained during registration
@@ -161,7 +160,7 @@ class OAuth2Session(aiohttp.ClientSession):
                 redirect_uri=self.redirect_uri,
                 scope=self.scope,
                 state=state,
-                **kwargs
+                **kwargs,
             ),
             state,
         )
@@ -184,7 +183,7 @@ class OAuth2Session(aiohttp.ClientSession):
         include_client_id=None,
         client_id=None,
         client_secret=None,
-        **kwargs
+        **kwargs,
     ):
         """Generic method for fetching an access token from the token endpoint.
         If you are using the MobileApplicationClient you will want to use
@@ -311,7 +310,7 @@ class OAuth2Session(aiohttp.ClientSession):
             body=body,
             redirect_uri=self.redirect_uri,
             include_client_id=include_client_id,
-            **kwargs
+            **kwargs,
         )
 
         headers = headers or {
@@ -371,7 +370,7 @@ class OAuth2Session(aiohttp.ClientSession):
         headers=None,
         verify_ssl=True,
         proxies=None,
-        **kwargs
+        **kwargs,
     ):
         """Fetch a new access token using a refresh token.
         :param token_url: The token endpoint, must be HTTPS.
@@ -424,7 +423,9 @@ class OAuth2Session(aiohttp.ClientSession):
         log.debug("Response headers were %s and content %s.", resp.headers, text)
         (resp,) = self._invoke_hooks("access_token_response", resp)
 
-        self.token = self._client.parse_request_body_response(await resp.text(), scope=self.scope)
+        self.token = self._client.parse_request_body_response(
+            await resp.text(), scope=self.scope
+        )
         if "refresh_token" not in self.token:
             log.debug("No new refresh token given. Re-using old.")
             self.token["refresh_token"] = refresh_token
@@ -440,7 +441,7 @@ class OAuth2Session(aiohttp.ClientSession):
         withhold_token=False,
         client_id=None,
         client_secret=None,
-        **kwargs
+        **kwargs,
     ):
         """Intercept all requests and add the OAuth 2 token if present."""
         url = API_URL + url_fragment
@@ -549,7 +550,7 @@ class OAuth2Session(aiohttp.ClientSession):
             # print(resp.status)
 
             if resp.status == 429:
-                if not resp.headers.get('Via'):
+                if not resp.headers.get("Via"):
                     # Probably banned from cloudflare
                     raise RuntimeError
 
@@ -570,13 +571,13 @@ class OAuth2Session(aiohttp.ClientSession):
         :class:`User`
             The user who authorized the application.
         """
-        data = await self.discord_request('GET', '/users/@me')
+        data = await self.discord_request("GET", "/users/@me")
         user = User(data=data)
         self.discord_client.cached_user[user.id] = user
         return user
 
     async def guilds(self, user_id: int = None):
-        data = await self.discord_request('GET', '/users/@me/guilds')
+        data = await self.discord_request("GET", "/users/@me/guilds")
         guilds = []
         try:
             data["global"]

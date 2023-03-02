@@ -7,9 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 class ExpiringDict(dict):
     """Subclassed dict for expiring cache"""
 
-    def __init__(
-        self, items: Optional[Dict] = None, maxAgeSeconds: int = 3600
-    ) -> None:
+    def __init__(self, items: Optional[Dict] = None, maxAgeSeconds: int = 3600) -> None:
         self.maxAgeSeconds: int = maxAgeSeconds  # (Default: 3600 seconds (1 hour))
         curTime: float = time.monotonic()
 

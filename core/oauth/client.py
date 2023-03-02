@@ -1,8 +1,9 @@
 from typing import Iterable, Optional
 
+from utils import cache
+
 # from .http import HTTPClient, Route
 from .session import OAuth2Session
-from utils import cache
 
 __all__: tuple = ("OAuth2Client",)
 
@@ -47,8 +48,8 @@ class OAuth2Client:
             scope=self.scopes,
             redirect_uri=self.redirect,
             auto_refresh_kwargs={
-                'client_id': str(self.id),
-                'client_secret': self.secret,
+                "client_id": str(self.id),
+                "client_secret": self.secret,
             },
             # auto_refresh_url=_oauth2['token_url'],
             token_updater=token_updater,

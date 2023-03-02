@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import secrets
 import sys
 import time
 import traceback
-import json
 from functools import wraps
 from typing import Any, Dict, List
-from dotenv import load_dotenv
 
 import discord
 import uvicorn
 import zmq
 import zmq.asyncio
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -24,7 +24,6 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from core.oauth import Guild, OAuth2Client, OAuth2Session, User
 from utils.cache import ExpiringDict
-
 
 load_dotenv()
 
@@ -56,7 +55,9 @@ class API(FastAPI):
 
     def initSockets(self):
         self._reqSocket = self.context.socket(zmq.REQ)
-        self._reqSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556"))
+        self._reqSocket.connect(
+            "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
+        )
 
     @property
     def reqSocket(self) -> zmq.asyncio.Socket:
@@ -236,7 +237,7 @@ async def myGuilds(request: Request):
             CLIENT_ID,
             permissions=discord.Permissions(4260883702),
             guild=guild,
-            redirect_uri="http://127.0.0.1:8000/api/guild-auth"
+            redirect_uri="http://127.0.0.1:8000/api/guild-auth",
         )
         ret.append(guildJson)
 
@@ -251,7 +252,7 @@ async def guildAuth(request: Request, guild_id: int):
 
 
 @app.get("/api/v1/guildstats")
-#@requireValidAuth
+# @requireValidAuth
 async def guildStats(request: Request, guild_id: int):
     return await requestBot({"type": "guild", "id": guild_id})
 

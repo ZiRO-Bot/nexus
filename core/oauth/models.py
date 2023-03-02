@@ -4,7 +4,7 @@ from __future__ import annotations
 class DiscordObject:
     def __init__(self, data):
         self._data = data
-        self.id = data['id']
+        self.id = data["id"]
 
     def __eq__(self, other) -> bool:
         return other.id == self.id
@@ -35,11 +35,23 @@ class Guild(DiscordObject):
         self._data = data
 
         self._iconHash = self._data.get("icon")
-        self._iconFormat = None if not self._iconHash else "gif" if self._iconHash.startswith("a") else "png"
+        self._iconFormat = (
+            None
+            if not self._iconHash
+            else "gif"
+            if self._iconHash.startswith("a")
+            else "png"
+        )
 
         self.id: int = self._data["id"]
         self.name: str = self._data["name"]
-        self.icon_url: str | None = "https://cdn.discordapp.com/icons/{0.id}/{0._icon_hash}.{0._icon_format}".format(self) if self._iconFormat else None
+        self.icon_url: str | None = (
+            "https://cdn.discordapp.com/icons/{0.id}/{0._icon_hash}.{0._icon_format}".format(
+                self
+            )
+            if self._iconFormat
+            else None
+        )
         self.isOwner: bool | None = self._data.get("owner")
         self.features: list[str] = self._data.get("features", [])
         self.permissions: int = int(self._data.get("permissions", 0))
