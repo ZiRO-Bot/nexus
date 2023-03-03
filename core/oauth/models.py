@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-import threading
-
-from utils.cache import ExpiringDict
-
 
 class DiscordObject:
     def __init__(self, data):
