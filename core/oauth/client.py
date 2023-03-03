@@ -16,8 +16,8 @@ class OAuth2Client:
     def __init__(
         self,
         *,
-        client_id: int,
-        client_secret: str,
+        clientId: int,
+        clientSecret: str,
         redirect_uri: str,
         scopes: Optional[Iterable[str]] = None,
     ):
@@ -32,18 +32,19 @@ class OAuth2Client:
         :param scopes: A list of OAuth2 scopes, defaults to None
         :type scopes: Optional[Iterable[str]], optional
         """
-        self.id = client_id
-        self.secret = client_secret
+        self.id = clientId
+        self.secret = clientSecret
         self.redirect = redirect_uri
         self.scopes = " ".join(scopes) if scopes is not None else None
-        self.cached_user = cache.ExpiringDict(maxAgeSeconds=60)
-        self.cached_guilds = cache.ExpiringDict(maxAgeSeconds=60)
+        self.cachedUser = cache.ExpiringDict(maxAgeSeconds=60)
+        self.cachedGuilds = cache.ExpiringDict(maxAgeSeconds=60)
+        self.loggedIn = cache.ExpiringDict(maxAgeSeconds=604800)
 
-    def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
+    def session(self, session=None, state=None, token_updater=None) -> OAuth2Session:
         return OAuth2Session(
-            discord_client=self,
+            discordClient=self,
+            sessionId=session,
             client_id=self.id,
-            token=token,
             state=state,
             scope=self.scopes,
             redirect_uri=self.redirect,

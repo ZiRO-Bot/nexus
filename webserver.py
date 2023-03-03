@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import secrets
-import sys
 import time
 import traceback
+import uuid
 from functools import wraps
-from typing import Any, Dict, List
+from typing import Any, List
 
 import discord
 import uvicorn
@@ -20,25 +19,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from core.oauth import Guild, OAuth2Client, OAuth2Session, User
-from utils.cache import ExpiringDict
+from core.oauth import Guild, OAuth2Session, User
+from utils import cache
 
 load_dotenv()
 
 
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
-CLIENT_ID = int(os.getenv("DISCORD_CLIENT_ID", 0))
-CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
-REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI", "")
-FRONTEND_URI = os.getenv("DASHBOARD_FRONTEND_URI", "")
-if DEBUG:
-    FRONTEND_URI += ":8080"  # vue.js' dev build
-
-
-SESSION = ExpiringDict()  # TODO: Store to DB instead, use Redis maybe?
 
 
 class LoginRequest(BaseModel):
@@ -50,8 +40,45 @@ class API(FastAPI):
         super().__init__(*args, **kwargs)
         self.context = context or zmq.asyncio.Context.instance()
         self._reqSocket: zmq.asyncio.Socket | None = None
+
+        # Auth related stuff
+        self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
+        self.clientSecret = os.getenv("DISCORD_CLIENT_SECRET", "")
+        self.redirectUri = os.getenv("DISCORD_REDIRECT_URI", "")
+        self.frontendUri = os.getenv("DASHBOARD_FRONTEND_URI", "")
+        self.scopes = ("identify", "guilds")
+
+        # Cache
+        self.cachedUser = cache.ExpiringDict(maxAgeSeconds=60)
+        self.cachedGuilds = cache.ExpiringDict(maxAgeSeconds=60)
+
+        # FastAPI and Starlette stuff
         self.add_event_handler("startup", self.onStartup)
         self.add_event_handler("shutdown", self.onShutdown)
+        self.add_middleware(
+            CORSMiddleware,
+            allow_origins=[self.frontendUri],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+        self.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
+
+    def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
+        return OAuth2Session(
+            backendObj=self,
+            token=token,
+            clientId=self.clientId,
+            state=state,
+            scope=self.scopes,
+            redirectUri=self.redirectUri,
+            auto_refresh_kwargs={
+                "client_id": str(self.clientId),
+                "client_secret": self.clientSecret,
+            },
+            # auto_refresh_url=_oauth2['token_url'],
+            token_updater=token_updater,
+        )
 
     def initSockets(self):
         self._reqSocket = self.context.socket(zmq.REQ)
@@ -68,34 +95,21 @@ class API(FastAPI):
     async def onStartup(self):
         self.initSockets()
 
-    def onShutdown(self):
-        self.close()
-
     def close(self):
         self.reqSocket.close()
         self.context.term()
 
+    def onShutdown(self):
+        self.close()
+
 
 app = API(debug=DEBUG)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[FRONTEND_URI],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
-client = OAuth2Client(
-    client_id=CLIENT_ID,
-    client_secret=CLIENT_SECRET,
-    redirect_uri=REDIRECT_URI,
-    scopes=("identify", "guilds", "email", "connections"),
-)
 
 
-async def requestBot(request: dict) -> dict[str, Any]:
+async def requestBot(userId, requestMessage: dict) -> dict[str, Any]:
     try:
-        await app.reqSocket.send_string(json.dumps(request))
+        requestMessage["userId"] = userId
+        await app.reqSocket.send_string(json.dumps(requestMessage))
         message = json.loads(await app.reqSocket.recv_string())
         return message
     except Exception as e:
@@ -103,11 +117,11 @@ async def requestBot(request: dict) -> dict[str, Any]:
         return {"error": str(e)}
 
 
-async def getch_user(request: Request, token: Dict[str, Any]) -> User:
-    user = client.cached_user.get(request.session.get("userId", 0))
+async def getch_user(request: Request) -> User:
+    user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
-        async with client.session(token=token) as session:
+        async with app.session(token=request.session.get("authToken")) as session:
             user = await session.identify()  # type: ignore
 
             request.session["userId"] = user.id
@@ -115,16 +129,16 @@ async def getch_user(request: Request, token: Dict[str, Any]) -> User:
     return user
 
 
-async def getch_guilds(request: Request, token: Dict[str, Any]) -> List[Guild]:
+async def getch_guilds(request: Request) -> List[Guild]:
     userId = request.session.get("userId", 0)
     if not userId:
-        user = await getch_user(request, token)
+        user = await getch_user(request)
         userId = user.id
 
-    guilds = client.cached_guilds.get(userId)
+    guilds = app.cachedGuilds.get(userId)
 
     if not guilds:
-        async with client.session(token=token) as session:
+        async with app.session(token=request.session.get("authToken")) as session:
             guilds = await session.guilds(userId)  # type: ignore
 
     filtered = []
@@ -133,7 +147,7 @@ async def getch_guilds(request: Request, token: Dict[str, Any]) -> List[Guild]:
         if (guild.permissions & 1 << 4) != 1 << 4:
             continue
 
-        stats = await requestBot({"type": "guild", "id": guild.id})
+        stats = await requestBot(request.session.get("userId"), {"type": "guild", "id": guild.id})
         guild._data["stats"] = stats
         filtered.append(guild)
 
@@ -152,7 +166,7 @@ async def login(request: Request):
     # TODO:
     #  - Store token and user ID into Session DB
     #  - Give client unique ID and store it into browser cookie
-    session: OAuth2Session = client.session(token_updater=updateToken(request))
+    session: OAuth2Session = app.session(token_updater=updateToken(request))
     authorization_url, state = session.authorization_url()
     # authorization_url, state = session.authorization_url(prompt="none")
     request.session["state"] = state
@@ -178,63 +192,56 @@ def requireValidAuth(func):
     return predicate
 
 
-@app.get("/api/callback")
-async def callback(code: str = None, error: str = None):
-    if (not code and not error) or error:
-        if error:
-            print(error)
-        return RedirectResponse(url=FRONTEND_URI)
-
-    return RedirectResponse(url=FRONTEND_URI + f"/login?code={code}")
-
-
-@app.post("/api/v1/auth")
-async def auth(request: Request, data: LoginRequest):
-    code = data.code
-    token = request.session.get("oauthToken")
-    if token or not code:
-        return token
-        # return RedirectResponse(url=FRONTEND_URI)
+@app.get("/api/v1/callback")
+async def callback(request: Request, code: str = None, state: str = None):
+    if not code and not state:
+        return RedirectResponse(url=app.frontendUri)
 
     try:
-        async with client.session(state=request.session["state"]) as session:
-            token = await session.fetch_token(  # type: ignore
-                code=code, client_secret=client.secret
+        if request.session.get("authToken") or not code:
+            # TODO: Handle refresh token
+            raise
+
+        async with app.session(token=request.session.get("authToken"), state=state) as session:  # type: ignore
+            session: OAuth2Session
+            token = await session.fetch_token(
+                code=code, client_secret=app.clientSecret
             )
+            user = await session.identify()
     except Exception:
         print(traceback.format_exc())
-        return RedirectResponse(url=FRONTEND_URI)
-        # return RedirectResponse("/api/login")
+        return RedirectResponse(url=app.frontendUri)
 
-    request.session["oauthToken"] = token
-    request.session["oauthTime"] = int(time.time())
+    request.session["authToken"] = token
+    request.session["userId"] = user.id
 
-    return token
+    resp = RedirectResponse(url=app.frontendUri + f"/login?code={code}")
+    resp.set_cookie("user", user.name)
+    resp.set_cookie("loggedIn", "true")
+    return resp
 
 
 @app.get("/api/v1/@me")
 @requireValidAuth
 async def me(request: Request):
-    token = request.session["oauthToken"]
+    user = await getch_user(request)
+    resp = JSONResponse(user.json())
+    resp.set_cookie("user", user.name)
 
-    user = await getch_user(request, token)
-
-    return user.json()
+    return resp
 
 
 @app.get("/api/v1/@me/guilds")
 @requireValidAuth
 async def myGuilds(request: Request):
-    token = request.session["oauthToken"]
-
-    guilds = await getch_guilds(request, token)
-    botGuilds: dict = await requestBot({"type": "managed-guilds"})
+    guilds = await getch_guilds(request)
+    botGuilds: dict = await requestBot(request.session.get("userId"), {"type": "managed-guilds"})
     ret = []
     for guild in guilds:
         guildJson = guild.json()
         guildJson["bot"] = guild.name in botGuilds
         guildJson["invite"] = discord.utils.oauth_url(
-            CLIENT_ID,
+            app.clientId,
             permissions=discord.Permissions(4260883702),
             guild=guild,
             redirect_uri="http://127.0.0.1:8000/api/guild-auth",
@@ -252,9 +259,9 @@ async def guildAuth(request: Request, guild_id: int):
 
 
 @app.get("/api/v1/guildstats")
-# @requireValidAuth
+@requireValidAuth
 async def guildStats(request: Request, guild_id: int):
-    return await requestBot({"type": "guild", "id": guild_id})
+    return await requestBot(request.session.get("userId"), {"type": "guild", "id": guild_id})
 
 
 @app.post("/api/logout")
@@ -265,17 +272,17 @@ async def logout(request: Request):
 
 
 @app.get("/api/v1/botstats")
-async def botstats(requests: Request):
-    stats = await requestBot({"type": "bot"})
+async def botstats(request: Request):
+    stats = await requestBot(request.session.get("userId"), {"type": "bot"})
     stats["isLoggedIn"] = validateAuth(
-        requests.session.get("oauthToken"), requests.session.get("oauthTime", 0)
+        request.session.get("oauthToken"), request.session.get("oauthTime", 0)
     )
 
     return stats
 
 
 @app.exception_handler(HTTPException)
-async def notAuthorized(request, exc):
+async def errorHandler(request, exc):
     return JSONResponse(
         {"status": exc.status_code, "detail": str(exc.detail)},
         status_code=exc.status_code,
@@ -283,8 +290,11 @@ async def notAuthorized(request, exc):
 
 
 @app.get("/api")
-async def hello():
-    return {"data": "Hello World!"}
+async def hello(request: Request):
+    request.cookies["test"] = "Hello"
+    resp = Response(json.dumps({"data": request.cookies["test"]}), media_type="application/json")
+    resp.set_cookie("test", "hello")
+    return resp
 
 
 if __name__ == "__main__":

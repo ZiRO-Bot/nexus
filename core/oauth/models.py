@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import Any
+import threading
+
+from utils.cache import ExpiringDict
+
 
 class DiscordObject:
     def __init__(self, data):
         self._data = data
-        self.id = data["id"]
+
+        self.id: int = data["id"]
 
     def __eq__(self, other) -> bool:
         return other.id == self.id
@@ -20,19 +26,15 @@ class DiscordObject:
         return self._data
 
 
-# class TokenResponse(DiscordObject):
-#     def __init__(self, *, data: dict) -> None:
-#         self._data = data
-#         self.access_token: str = self._data["access_token"]
-#         self.token_type: str = self._data["token_type"]
-#         self.expires_in: int = self._data["expires_in"]
-#         self.refresh_token: str = self._data["refresh_token"]
-#         self.scope: str = self._data["scope"]
+class SessionUser(DiscordObject):
+    def __init__(self, token: str, userId: int) -> None:
+        self.oauthToken: str = token
+        self.userId: int = userId
 
 
 class Guild(DiscordObject):
     def __init__(self, *, data: dict) -> None:
-        self._data = data
+        super().__init__(data)
 
         self._iconHash = self._data.get("icon")
         self._iconFormat = (
@@ -43,7 +45,6 @@ class Guild(DiscordObject):
             else "png"
         )
 
-        self.id: int = self._data["id"]
         self.name: str = self._data["name"]
         self.icon_url: str | None = (
             "https://cdn.discordapp.com/icons/{0.id}/{0._icon_hash}.{0._icon_format}".format(
@@ -59,9 +60,8 @@ class Guild(DiscordObject):
 
 class User(DiscordObject):
     def __init__(self, *, data: dict):
-        self._data = data
+        super().__init__(data)
 
-        self.id: int = self._data["id"]
         self.name: str = self._data["username"]
         self.avatarUrl: str | None = self._data["avatar"]
         self.discriminator: int = self._data["discriminator"]

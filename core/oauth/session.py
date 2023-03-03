@@ -2,15 +2,20 @@ from __future__ import annotations, unicode_literals
 
 import asyncio
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, TYPE_CHECKING
 
 import aiohttp
 from oauthlib.common import generate_token, urldecode
-from oauthlib.oauth2 import (InsecureTransportError, LegacyApplicationClient,
+from oauthlib.oauth2 import (InsecureTransportError,
                              TokenExpiredError, WebApplicationClient,
                              is_secure_transport)
 
 from core.oauth.models import Guild, User
+
+
+if TYPE_CHECKING:
+    from webserver import API
+
 
 log = logging.getLogger(__name__)
 
@@ -31,14 +36,14 @@ class OAuth2Session(aiohttp.ClientSession):
     def __init__(
         self,
         *,
-        discord_client,
-        client_id=None,
+        backendObj: API,
+        token=None,
+        clientId=None,
         client=None,
         auto_refresh_url=None,
         auto_refresh_kwargs=None,
         scope=None,
-        redirect_uri=None,
-        token=None,
+        redirectUri=None,
         state=None,
         token_updater=None,
         **kwargs,
@@ -69,11 +74,12 @@ class OAuth2Session(aiohttp.ClientSession):
         :param kwargs: Arguments to pass to the Session constructor.
         """
         super(OAuth2Session, self).__init__(**kwargs)
-        self.discord_client = discord_client
-        self._client = client or WebApplicationClient(str(client_id), token=token)
-        # self.token = token or {}
+        # Client for Backend
+        self.backendObj = backendObj
+        # Client exclusively for Auth functions
+        self.authClient = client or WebApplicationClient(str(clientId), token=token)
         self.scope = scope
-        self.redirect_uri = redirect_uri
+        self.redirect_uri = redirectUri
         self.state = state or generate_token
         self._state = state
         self.auto_refresh_url = auto_refresh_url or TOKEN_URL
@@ -103,36 +109,36 @@ class OAuth2Session(aiohttp.ClientSession):
 
     @property
     def client_id(self):
-        return getattr(self._client, "client_id", None)
+        return getattr(self.authClient, "client_id", None)
 
     @client_id.setter
     def client_id(self, value):
-        self._client.client_id = value
+        self.authClient.client_id = value
 
     @client_id.deleter
     def client_id(self):
-        del self._client.client_id
+        del self.authClient.client_id
 
     @property
     def token(self):
-        return getattr(self._client, "token", {})
+        return getattr(self.authClient, "token", {})
 
     @token.setter
     def token(self, value):
-        self._client.token = value
-        self._client.populate_token_attributes(value)
+        self.authClient.token = value
+        self.authClient.populate_token_attributes(value)
 
     @property
     def access_token(self):
-        return getattr(self._client, "access_token", None)
+        return getattr(self.authClient, "access_token", None)
 
     @access_token.setter
     def access_token(self, value):
-        self._client.access_token = value
+        self.authClient.access_token = value
 
     @access_token.deleter
     def access_token(self):
-        del self._client.access_token
+        del self.authClient.access_token
 
     @property
     def authorized(self):
@@ -155,7 +161,7 @@ class OAuth2Session(aiohttp.ClientSession):
         """
         state = state or self.new_state()
         return (
-            self._client.prepare_request_uri(
+            self.authClient.prepare_request_uri(
                 AUTH_URL,
                 redirect_uri=self.redirect_uri,
                 scope=self.scope,
@@ -172,8 +178,6 @@ class OAuth2Session(aiohttp.ClientSession):
         authorization_response=None,
         body="",
         auth=None,
-        username=None,
-        password=None,
         method="POST",
         force_querystring=False,
         timeout=None,
@@ -197,10 +201,6 @@ class OAuth2Session(aiohttp.ClientSession):
         :param body: Optional application/x-www-form-urlencoded body to add the
                      include in the token request. Prefer kwargs over body.
         :param auth: An auth tuple or method as accepted by `requests`.
-        :param username: Username required by LegacyApplicationClients to appear
-                         in the request body.
-        :param password: Password required by LegacyApplicationClients to appear
-                         in the request body.
         :param method: The HTTP method used to make the request. Defaults
                        to POST, but may also be GET. Other methods should
                        be added as needed.
@@ -229,47 +229,11 @@ class OAuth2Session(aiohttp.ClientSession):
 
         if not code and authorization_response:
             log.debug("-- response %s", authorization_response)
-            self._client.parse_request_uri_response(
+            self.authClient.parse_request_uri_response(
                 str(authorization_response), state=self._state
             )
-            code = self._client.code
+            code = self.authClient.code
             log.debug("--code %s", code)
-        elif not code and isinstance(self._client, WebApplicationClient):
-            code = self._client.code
-            if not code:
-                raise ValueError(
-                    "Please supply either code or " "authorization_response parameters."
-                )
-
-        # Earlier versions of this library build an HTTPBasicAuth header out of
-        # `username` and `password`. The RFC states, however these attributes
-        # must be in the request body and not the header.
-        # If an upstream server is not spec compliant and requires them to
-        # appear as an Authorization header, supply an explicit `auth` header
-        # to this function.
-        # This check will allow for empty strings, but not `None`.
-        #
-        # Refernences
-        # 4.3.2 - Resource Owner Password Credentials Grant
-        #         https://tools.ietf.org/html/rfc6749#section-4.3.2
-
-        if isinstance(self._client, LegacyApplicationClient):
-            if username is None:
-                raise ValueError(
-                    "`LegacyApplicationClient` requires both the "
-                    "`username` and `password` parameters."
-                )
-            if password is None:
-                raise ValueError(
-                    "The required parameter `username` was supplied, "
-                    "but `password` was not."
-                )
-
-        # merge username and password into kwargs for `prepare_request_body`
-        if username is not None:
-            kwargs["username"] = username
-        if password is not None:
-            kwargs["password"] = password
 
         # is an auth explicitly supplied?
         if auth is not None:
@@ -305,7 +269,7 @@ class OAuth2Session(aiohttp.ClientSession):
             if client_secret is not None:
                 kwargs["client_secret"] = client_secret
 
-        body = self._client.prepare_request_body(
+        body = self.authClient.prepare_request_body(
             code=code,
             body=body,
             redirect_uri=self.redirect_uri,
@@ -317,7 +281,7 @@ class OAuth2Session(aiohttp.ClientSession):
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         }
-        self.token = {}
+        token = {}
         request_kwargs = {}
         if method.upper() == "POST":
             request_kwargs["params" if force_querystring else "data"] = dict(
@@ -327,7 +291,7 @@ class OAuth2Session(aiohttp.ClientSession):
             request_kwargs["params"] = dict(urldecode(body))
         else:
             raise ValueError("The method kwarg must be POST or GET.")
-        # print(method, TOKEN_URL, timeout, headers, auth, verify_ssl, proxies, request_kwargs['data'])
+
         async with self.request(
             method=method,
             url=TOKEN_URL,
@@ -345,20 +309,21 @@ class OAuth2Session(aiohttp.ClientSession):
 
             log.debug("Response headers were %s and content %s.", resp.headers, text)
             (resp,) = self._invoke_hooks("access_token_response", resp)
-        self._client.parse_request_body_response(await resp.text(), scope=self.scope)
-        self.token = self._client.token
-        log.debug("Obtained token %s.", self.token)
-        return self.token
+
+        self.authClient.parse_request_body_response(await resp.text(), scope=self.scope)
+        token = self.authClient.token
+        log.debug("Obtained token %s.", token)
+        return token
 
     def token_from_fragment(self, authorization_response):
         """Parse token from the URI fragment, used by MobileApplicationClients.
         :param authorization_response: The full URL of the redirect back to you
         :return: A token dict
         """
-        self._client.parse_request_uri_response(
+        self.authClient.parse_request_uri_response(
             authorization_response, state=self._state
         )
-        self.token = self._client.token
+        self.token = self.authClient.token
         return self.token
 
     async def refresh_token(
@@ -395,7 +360,7 @@ class OAuth2Session(aiohttp.ClientSession):
         )
 
         kwargs.update(self.auto_refresh_kwargs)
-        body = self._client.prepare_refresh_body(
+        body = self.authClient.prepare_refresh_body(
             body=body, refresh_token=refresh_token, scope=self.scope, **kwargs
         )
         log.debug("Prepared refresh token request body %s", body)
@@ -423,7 +388,7 @@ class OAuth2Session(aiohttp.ClientSession):
         log.debug("Response headers were %s and content %s.", resp.headers, text)
         (resp,) = self._invoke_hooks("access_token_response", resp)
 
-        self.token = self._client.parse_request_body_response(
+        self.token = self.authClient.parse_request_body_response(
             await resp.text(), scope=self.scope
         )
         if "refresh_token" not in self.token:
@@ -456,11 +421,11 @@ class OAuth2Session(aiohttp.ClientSession):
             )
             log.debug("Adding token %s to request.", self.token)
             try:
-                url, headers, data = self._client.add_token(
+                url, headers, data = self.authClient.add_token(
                     url, http_method=method, body=data, headers=headers
                 )
             # Attempt to retrieve and save new access token if expired
-            except TokenExpiredError:
+            except TokenExpiredError as e:
                 if self.auto_refresh_url:
                     log.debug(
                         "Auto refresh is set, attempting to refresh at %s.",
@@ -485,13 +450,13 @@ class OAuth2Session(aiohttp.ClientSession):
                             "Updating token to %s using %s.", token, self.token_updater
                         )
                         await self.token_updater(token)
-                        url, headers, data = self._client.add_token(
+                        url, headers, data = self.authClient.add_token(
                             url, http_method=method, body=data, headers=headers
                         )
                     else:
                         raise TokenUpdated(token)
                 else:
-                    raise
+                    raise e
 
         log.debug("Requesting url %s using method %s.", url, method)
         log.debug("Supplying headers %s and data %s", headers, data)
@@ -573,7 +538,7 @@ class OAuth2Session(aiohttp.ClientSession):
         """
         data = await self.discord_request("GET", "/users/@me")
         user = User(data=data)
-        self.discord_client.cached_user[user.id] = user
+        self.backendObj.cachedUser[user.id] = user
         return user
 
     async def guilds(self, user_id: int = None):
@@ -586,5 +551,5 @@ class OAuth2Session(aiohttp.ClientSession):
                 guilds.append(Guild(data=guild))
         # guilds = [Guild(data=g) for g in data]
         if user_id is None:
-            self.discord_client.cached_guilds[user_id] = guilds
+            self.backendObj.cachedGuilds[user_id] = guilds
         return guilds
