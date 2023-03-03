@@ -26,6 +26,7 @@ from utils import cache
 load_dotenv()
 
 
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = "1"  # Discord response with different scope for some reason
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
 
@@ -61,7 +62,11 @@ class API(FastAPI):
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        self.add_middleware(SessionMiddleware, secret_key=secrets.token_urlsafe(32))
+        self.add_middleware(
+            SessionMiddleware,
+            secret_key=secrets.token_urlsafe(32),
+            max_age=None
+        )
 
     def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
         return OAuth2Session(
@@ -173,15 +178,15 @@ async def login(request: Request):
     return RedirectResponse(authorization_url)
 
 
-def validateAuth(oauthToken: Any, oauthTime: int) -> bool:
-    return not ((oauthToken is None) or (int(time.time()) - oauthTime > 604800))
+def validateAuth(authToken: Any, authTime: int) -> bool:
+    return not any([authToken is None, int(time.time()) - authTime > 604800])
 
 
 def requireValidAuth(func):
     @wraps(func)
     async def predicate(request: Request, *args, **kwargs):
         valid = validateAuth(
-            request.session.get("oauthToken"), request.session.get("oauthTime", 0)
+            request.session.get("authToken"), request.session.get("authTime", 0)
         )
         if not valid:
             raise HTTPException(401)
@@ -212,11 +217,12 @@ async def callback(request: Request, code: str = None, state: str = None):
         return RedirectResponse(url=app.frontendUri)
 
     request.session["authToken"] = token
+    request.session["authTime"] = int(time.time())
     request.session["userId"] = user.id
 
-    resp = RedirectResponse(url=app.frontendUri + f"/login?code={code}")
-    resp.set_cookie("user", user.name)
-    resp.set_cookie("loggedIn", "true")
+    resp = RedirectResponse(url=app.frontendUri)
+    resp.set_cookie("user", user.name, max_age=31556926)
+    resp.set_cookie("loggedIn", "true", max_age=31556926)
     return resp
 
 
@@ -225,7 +231,8 @@ async def callback(request: Request, code: str = None, state: str = None):
 async def me(request: Request):
     user = await getch_user(request)
     resp = JSONResponse(user.json())
-    resp.set_cookie("user", user.name)
+    if not request.cookies.get("user"):
+        resp.set_cookie("user", user.name)
 
     return resp
 
@@ -267,25 +274,29 @@ async def guildStats(request: Request, guild_id: int):
 @requireValidAuth
 async def logout(request: Request):
     request.session.clear()
-    return {"status": 200, "detail": "success"}
+    resp = JSONResponse({"status": 200, "detail": "success"})
+    resp.delete_cookie("user")
+    resp.delete_cookie("loggedIn")
+    return resp
 
 
 @app.get("/api/v1/botstats")
 async def botstats(request: Request):
     stats = await requestBot(request.session.get("userId"), {"type": "bot"})
-    stats["isLoggedIn"] = validateAuth(
-        request.session.get("oauthToken"), request.session.get("oauthTime", 0)
-    )
 
     return stats
 
 
 @app.exception_handler(HTTPException)
 async def errorHandler(request, exc):
-    return JSONResponse(
+    resp = JSONResponse(
         {"status": exc.status_code, "detail": str(exc.detail)},
         status_code=exc.status_code,
     )
+    if exc.status_code == 401:
+        resp.delete_cookie("user")
+        resp.delete_cookie("loggedIn")
+    return resp
 
 
 @app.get("/api")
