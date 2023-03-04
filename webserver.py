@@ -86,6 +86,7 @@ class API(FastAPI):
 
     def initSockets(self):
         self._reqSocket = self.context.socket(zmq.REQ)
+        self._reqSocket.setsockopt(zmq.LINGER, 0)
         self._reqSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
         )
@@ -110,9 +111,10 @@ class API(FastAPI):
 app = API(debug=DEBUG)
 
 
-async def requestBot(userId, requestMessage: dict) -> dict[str, Any]:
+async def requestBot(requestMessage: dict, userId: str | None = None) -> dict[str, Any]:
     try:
-        requestMessage["userId"] = userId
+        if userId:
+            requestMessage["userId"] = userId
         await app.reqSocket.send_string(json.dumps(requestMessage))
         message = json.loads(await app.reqSocket.recv_string())
         return message
@@ -151,7 +153,7 @@ async def getch_guilds(request: Request) -> List[Guild]:
         if (guild.permissions & 1 << 4) != 1 << 4:
             continue
 
-        stats = await requestBot(request.session.get("userId"), {"type": "guild", "id": guild.id})
+        stats = await requestBot({"type": "guild", "id": guild.id}, request.session.get("userId"))
         guild._data["stats"] = stats
         filtered.append(guild)
 
@@ -222,7 +224,7 @@ async def callback(request: Request, code: str = None, state: str = None):
 
     resp = RedirectResponse(url=app.frontendUri)
     resp.set_cookie("user", user.name, max_age=31556926)
-    resp.set_cookie("loggedIn", "true", max_age=31556926)
+    resp.set_cookie("loggedIn", "yes", max_age=31556926)
     return resp
 
 
@@ -241,7 +243,7 @@ async def me(request: Request):
 @requireValidAuth
 async def myGuilds(request: Request):
     guilds = await getch_guilds(request)
-    botGuilds: dict = await requestBot(request.session.get("userId"), {"type": "managed-guilds"})
+    botGuilds: dict = await requestBot({"type": "managed-guilds"}, request.session.get("userId"))
     ret = []
     for guild in guilds:
         guildJson = guild.json()
@@ -250,7 +252,7 @@ async def myGuilds(request: Request):
             app.clientId,
             permissions=discord.Permissions(4260883702),
             guild=guild,
-            redirect_uri="http://127.0.0.1:8000/api/guild-auth",
+            redirect_uri="http://127.0.0.1/api/guild-callback",
         )
         ret.append(guildJson)
 
@@ -258,7 +260,7 @@ async def myGuilds(request: Request):
     return sorted(ret, key=lambda g: (not g["bot"], g["name"]))
 
 
-@app.get("/api/guild-auth")
+@app.get("/api/v1/guild-callback")
 @requireValidAuth
 async def guildAuth(request: Request, guild_id: int):
     return "hello world"
@@ -267,7 +269,7 @@ async def guildAuth(request: Request, guild_id: int):
 @app.get("/api/v1/guildstats")
 @requireValidAuth
 async def guildStats(request: Request, guild_id: int):
-    return await requestBot(request.session.get("userId"), {"type": "guild", "id": guild_id})
+    return await requestBot({"type": "guild", "id": guild_id}, request.session.get("userId"))
 
 
 @app.post("/api/logout")
@@ -275,14 +277,16 @@ async def guildStats(request: Request, guild_id: int):
 async def logout(request: Request):
     request.session.clear()
     resp = JSONResponse({"status": 200, "detail": "success"})
-    resp.delete_cookie("user")
-    resp.delete_cookie("loggedIn")
+    if request.cookies.get("user"):
+        resp.delete_cookie("user")
+    if request.cookies.get("loggedIn"):
+        resp.delete_cookie("loggedIn")
     return resp
 
 
 @app.get("/api/v1/botstats")
 async def botstats(request: Request):
-    stats = await requestBot(request.session.get("userId"), {"type": "bot"})
+    stats = await requestBot({"type": "bot-stats"})
 
     return stats
 
