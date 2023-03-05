@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 
+CDN_BASE = "https://cdn.discordapp.com"
+
+
 class DiscordObject:
     def __init__(self, data):
         self._data = data
@@ -31,21 +34,19 @@ class Guild(DiscordObject):
     def __init__(self, *, data: dict) -> None:
         super().__init__(data)
 
-        self._iconHash = self._data.get("icon")
-        self._iconFormat = (
+        icon = self._data.get("icon")
+        format = (
             None
-            if not self._iconHash
+            if not icon
             else "gif"
-            if self._iconHash.startswith("a")
+            if icon.startswith("a")
             else "png"
         )
 
         self.name: str = self._data["name"]
         self.iconUrl: str | None = (
-            "https://cdn.discordapp.com/icons/{0.id}/{0._iconHash}.{0._iconFormat}".format(
-                self
-            )
-            if self._iconFormat
+            f"{CDN_BASE}/icons/{self.id}/{icon}.{format}"
+            if icon
             else None
         )
         self.isOwner: bool | None = self._data.get("owner")
@@ -63,8 +64,21 @@ class User(DiscordObject):
     def __init__(self, *, data: dict):
         super().__init__(data)
 
+        avatar = self._data.get("avatar")
+        format = (
+            None
+            if not avatar
+            else "gif"
+            if avatar.startswith("a")
+            else "png"
+        )
+
         self.name: str = self._data["username"]
-        self.avatarUrl: str = self._data["avatar"]
+        self.avatarUrl: str = (
+            f"{CDN_BASE}/avatars/{self.id}/{avatar}.{format}"
+            if avatar
+            else f"{CDN_BASE}/embed/avatars/{int(self.discriminator) % 5}.png"
+        )
         self.discriminator: int = self._data["discriminator"]
         self.mfaEnabled: bool | None = self._data.get("mfa_enabled")
         self.email: str | None = self._data.get("email")
