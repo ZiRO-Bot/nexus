@@ -42,7 +42,7 @@ class Guild(DiscordObject):
 
         self.name: str = self._data["name"]
         self.icon_url: str | None = (
-            "https://cdn.discordapp.com/icons/{0.id}/{0._icon_hash}.{0._icon_format}".format(
+            "https://cdn.discordapp.com/icons/{0.id}/{0._iconHash}.{0._iconFormat}".format(
                 self
             )
             if self._iconFormat
