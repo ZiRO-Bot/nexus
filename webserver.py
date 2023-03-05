@@ -26,13 +26,15 @@ from utils import cache
 load_dotenv()
 
 
-os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = "1"  # Discord response with different scope for some reason
+os.environ[
+    "OAUTHLIB_RELAX_TOKEN_SCOPE"
+] = "1"  # Discord response with different scope for some reason
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
 
-
-class LoginRequest(BaseModel):
-    code: str
+class PrefixRequest(BaseModel):
+    prefix: str
+    guildId: int
 
 
 class API(FastAPI):
@@ -63,9 +65,7 @@ class API(FastAPI):
             allow_headers=["*"],
         )
         self.add_middleware(
-            SessionMiddleware,
-            secret_key=secrets.token_urlsafe(32),
-            max_age=None
+            SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_age=None
         )
 
     def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
@@ -115,11 +115,15 @@ app = API(debug=DEBUG)
 async def requestBot(requestMessage: dict, userId: str | None = None) -> list[Any]:
     ...
 
+
 @overload
 async def requestBot(requestMessage: dict, userId: str | None = None) -> dict[str, Any]:
     ...
 
-async def requestBot(requestMessage: dict, userId: str | None = None) -> dict[str, Any] | list[Any]:
+
+async def requestBot(
+    requestMessage: dict, userId: str | None = None
+) -> dict[str, Any] | list[Any]:
     try:
         if userId:
             requestMessage["userId"] = userId
@@ -161,7 +165,9 @@ async def getch_guilds(request: Request) -> List[Guild]:
         if (guild.permissions & 1 << 4) != 1 << 4:
             continue
 
-        stats = await requestBot({"type": "guilds", "id": guild.id}, request.session.get("userId"))
+        stats = await requestBot(
+            {"type": "guilds", "id": guild.id}, request.session.get("userId")
+        )
         guild._data["stats"] = stats
         filtered.append(guild)
 
@@ -218,9 +224,7 @@ async def callback(request: Request, code: str = None, state: str = None):
 
         async with app.session(token=request.session.get("authToken"), state=state) as session:  # type: ignore
             session: OAuth2Session
-            token = await session.fetch_token(
-                code=code, client_secret=app.clientSecret
-            )
+            token = await session.fetch_token(code=code, client_secret=app.clientSecret)
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
@@ -248,7 +252,9 @@ async def me(request: Request):
 @requireValidAuth
 async def myGuilds(request: Request):
     guilds = await getch_guilds(request)
-    botGuilds: list[int] = await requestBot({"type": "managed-guilds"}, request.session.get("userId"))
+    botGuilds: list[int] = await requestBot(
+        {"type": "managed-guilds"}, request.session.get("userId")
+    )
     ret = []
 
     for guild in guilds:
@@ -276,7 +282,9 @@ async def guildAuth(request: Request, guild_id: int):
 @app.get("/api/v1/guildstats")
 @requireValidAuth
 async def guildStats(request: Request, guild_id: int):
-    return await requestBot({"type": "guild", "id": guild_id}, request.session.get("userId"))
+    return await requestBot(
+        {"type": "guild", "id": guild_id}, request.session.get("userId")
+    )
 
 
 @app.post("/api/logout")
@@ -291,9 +299,15 @@ async def logout(request: Request):
 
 @app.get("/api/v1/botstats")
 async def botstats(request: Request):
-    stats = await requestBot({"type": "bot-stats"})
+    return await requestBot({"type": "bot-stats"})
 
-    return stats
+
+@app.put("/api/v1/prefix")
+async def prefixPut(request: Request, prefix: PrefixRequest):
+    return await requestBot(
+        {"type": "prefix-add", "guildId": prefix.guildId, "prefix": prefix.prefix},
+        request.session.get("userId"),
+    )
 
 
 @app.exception_handler(HTTPException)
