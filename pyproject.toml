@@ -10,6 +10,7 @@ python = "^3.10"
 fastapi = "0.92.0"
 "discord.py" = "2.2"
 pyzmq = "25.0.0"
+websockets = "^10.4"
 
 [tool.poetry.dev-dependencies]
 

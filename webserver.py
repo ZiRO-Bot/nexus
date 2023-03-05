@@ -13,7 +13,7 @@ import uvicorn
 import zmq
 import zmq.asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -308,12 +308,13 @@ async def errorHandler(request, exc):
     return resp
 
 
-@app.get("/api")
-async def hello(request: Request):
-    request.cookies["test"] = "Hello"
-    resp = Response(json.dumps({"data": request.cookies["test"]}), media_type="application/json")
-    resp.set_cookie("test", "hello")
-    return resp
+@app.websocket("/ws")
+async def ws(websocket: WebSocket):
+    await websocket.accept()
+    while True:
+        data = await websocket.receive_text()
+        # TODO
+        await websocket.send_text(f"Message text was: {data}")
 
 
 if __name__ == "__main__":
