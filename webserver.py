@@ -231,7 +231,6 @@ async def callback(request: Request, code: str = None, state: str = None):
     request.session["userId"] = user.id
 
     resp = RedirectResponse(url=app.frontendUri)
-    resp.set_cookie("user", user.name, max_age=31556926)
     resp.set_cookie("loggedIn", "yes", max_age=31556926)
     return resp
 
@@ -241,8 +240,6 @@ async def callback(request: Request, code: str = None, state: str = None):
 async def me(request: Request):
     user = await getch_user(request)
     resp = JSONResponse(user.json())
-    if not request.cookies.get("user"):
-        resp.set_cookie("user", user.name)
 
     return resp
 
@@ -287,8 +284,6 @@ async def guildStats(request: Request, guild_id: int):
 async def logout(request: Request):
     request.session.clear()
     resp = JSONResponse({"status": 200, "detail": "success"})
-    if request.cookies.get("user"):
-        resp.delete_cookie("user")
     if request.cookies.get("loggedIn"):
         resp.delete_cookie("loggedIn")
     return resp
@@ -308,7 +303,6 @@ async def errorHandler(request, exc):
         status_code=exc.status_code,
     )
     if exc.status_code == 401:
-        resp.delete_cookie("user")
         resp.delete_cookie("loggedIn")
     return resp
 
