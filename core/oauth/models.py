@@ -41,7 +41,7 @@ class Guild(DiscordObject):
         )
 
         self.name: str = self._data["name"]
-        self.icon_url: str | None = (
+        self.iconUrl: str | None = (
             "https://cdn.discordapp.com/icons/{0.id}/{0._iconHash}.{0._iconFormat}".format(
                 self
             )
@@ -52,13 +52,19 @@ class Guild(DiscordObject):
         self.features: list[str] = self._data.get("features", [])
         self.permissions: int = int(self._data.get("permissions", 0))
 
+    def json(self):
+        """Returns the original JSON data for this model."""
+        data = super().json()
+        data["icon"] = self.iconUrl
+        return data
+
 
 class User(DiscordObject):
     def __init__(self, *, data: dict):
         super().__init__(data)
 
         self.name: str = self._data["username"]
-        self.avatarUrl: str | None = self._data["avatar"]
+        self.avatarUrl: str = self._data["avatar"]
         self.discriminator: int = self._data["discriminator"]
         self.mfaEnabled: bool | None = self._data.get("mfa_enabled")
         self.email: str | None = self._data.get("email")
@@ -73,3 +79,9 @@ class User(DiscordObject):
         return "<User id={0.id} name={0.name} discriminator={0.discriminator} verified={0.verified}>".format(
             self
         )
+
+    def json(self):
+        """Returns the original JSON data for this model."""
+        data = super().json()
+        data["avatar"] = self.avatarUrl
+        return data

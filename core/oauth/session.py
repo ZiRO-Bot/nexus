@@ -541,7 +541,7 @@ class OAuth2Session(aiohttp.ClientSession):
         self.backendObj.cachedUser[user.id] = user
         return user
 
-    async def guilds(self, user_id: int = None):
+    async def guilds(self, user_id: int = None) -> list[Guild]:
         data = await self.discord_request("GET", "/users/@me/guilds")
         guilds = []
         try:
