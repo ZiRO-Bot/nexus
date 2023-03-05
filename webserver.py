@@ -303,7 +303,8 @@ async def errorHandler(request, exc):
         status_code=exc.status_code,
     )
     if exc.status_code == 401:
-        resp.delete_cookie("loggedIn")
+        if request.cookies.get("loggedIn"):
+            resp.delete_cookie("loggedIn")
     return resp
 
 
