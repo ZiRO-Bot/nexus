@@ -303,6 +303,7 @@ async def botstats(request: Request):
 
 
 @app.put("/api/v1/prefix")
+@requireValidAuth
 async def prefixPut(request: Request, prefix: PrefixRequest):
     return await requestBot(
         {"type": "prefix-add", "guildId": prefix.guildId, "prefix": prefix.prefix},
@@ -322,7 +323,8 @@ async def errorHandler(request, exc):
     return resp
 
 
-@app.websocket("/ws")
+@app.websocket("/api/ws")
+@requireValidAuth
 async def ws(websocket: WebSocket):
     await websocket.accept()
     while True:

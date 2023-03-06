@@ -11,6 +11,7 @@ fastapi = "0.92.0"
 "discord.py" = "2.2"
 pyzmq = "25.0.0"
 websockets = "^10.4"
+uvicorn = "^0.20.0"
 
 [tool.poetry.dev-dependencies]
 
