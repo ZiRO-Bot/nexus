@@ -368,8 +368,7 @@ async def ws(websocket: WebSocket):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
-    loop = asyncio.get_event_loop()
-    task = loop.create_task(websocketSubcribeLoop(websocket))
+    task = asyncio.create_task(websocketSubcribeLoop(websocket))
 
     try:
         while True:
@@ -380,9 +379,6 @@ async def ws(websocket: WebSocket):
 
         if not isinstance(e, WebSocketDisconnect):
             await websocket.close()
-
-        if app._subSocket:
-            app._subSocket.close()
 
 
 if __name__ == "__main__":
