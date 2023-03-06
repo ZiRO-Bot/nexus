@@ -88,6 +88,7 @@ class API(FastAPI):
 
     def initSockets(self):
         self._reqSocket = self.context.socket(zmq.REQ)
+        self._reqSocket.setsockopt(zmq.RCVTIMEO, 1000)
         self._reqSocket.setsockopt(zmq.LINGER, 0)
         self._reqSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
@@ -95,6 +96,7 @@ class API(FastAPI):
 
         self._subSocket = app.context.socket(zmq.SUB)
         self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
+        self._subSocket.setsockopt(zmq.RCVTIMEO, 1000)
         self._subSocket.setsockopt(zmq.LINGER, 0)
         self._subSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554")
@@ -121,10 +123,12 @@ class API(FastAPI):
 
     def close(self):
         print("Closing sockets...")
-        if self._reqSocket:
-            self._reqSocket.close()
-        if self._subSocket:
-            self._subSocket.close()
+        sockets = (self._reqSocket, self._subSocket)
+        for socket in sockets:
+            if not socket:
+                continue
+            socket.close()
+
         print("Terminating context...")
         self.context.term()
         print("ZeroMQ has been closed")
@@ -239,6 +243,7 @@ def requireValidAuth(func):
 
 @app.get("/api/v1/callback")
 async def callback(request: Request, code: str = None, state: str = None):
+    # TODO: Handle redirect (If I click login in Guild page, I should be redirected to Guild page)
     if not code and not state:
         return RedirectResponse(url=app.frontendUri)
 
@@ -323,7 +328,7 @@ async def logout(request: Request):
 
 
 @app.get("/api/v1/botstats")
-async def botstats(request: Request):
+async def botstats():
     return await requestBot({"type": "bot-stats"})
 
 
@@ -360,11 +365,12 @@ async def websocketSubcribeLoop(websocket: WebSocket):
 
 @app.websocket("/api/ws")
 async def ws(websocket: WebSocket):
+    # Auth checker for WebSocket
     scope = websocket.scope
     scope["type"] = "http"
     request = Request(scope=scope, receive=websocket._receive)
     if not request.session.get("userId"):
-        scope["type"] = "websocket"
+        scope["type"] = "websocket"  # WebSocketException would raise error without this
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
