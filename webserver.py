@@ -119,11 +119,14 @@ class API(FastAPI):
         self.initSockets()
 
     def close(self):
+        print("Closing sockets...")
         if self._reqSocket:
             self._reqSocket.close()
         if self._subSocket:
             self._subSocket.close()
+        print("Terminating context...")
         self.context.term()
+        print("ZeroMQ has been closed")
 
     def onShutdown(self):
         self.close()
@@ -354,16 +357,15 @@ async def ws(websocket: WebSocket):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
-
-    await websocket.send_text(str(request.session.get("userId")))
     try:
         while True:
-            topic, msg = await app.subSocket.recv_multipart()
-            data = json.loads(msg.decode("utf8"))
-            await websocket.send_text(f"Topic: {topic.decode('utf8')} Data: {data}")
+            # TODO: Filter guild id
+            _, msg = await app.subSocket.recv_multipart()
+            await websocket.send_text(f"{msg.decode()}")
     except:
         await websocket.close()
-        app._subSocket.close()
+        if app._subSocket:
+            app._subSocket.close()
 
 
 if __name__ == "__main__":
