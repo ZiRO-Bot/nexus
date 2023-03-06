@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import secrets
@@ -13,7 +14,7 @@ import uvicorn
 import zmq
 import zmq.asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketException, status
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketException, status, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -347,6 +348,16 @@ async def errorHandler(request, exc):
     return resp
 
 
+async def websocketSubcribeLoop(websocket: WebSocket):
+    try:
+        while True:
+            # TODO: Filter guild id
+            _, msg = await app.subSocket.recv_multipart()
+            await websocket.send_text(f"{msg.decode()}")
+    except Exception as e:
+        print(e)
+
+
 @app.websocket("/api/ws")
 async def ws(websocket: WebSocket):
     scope = websocket.scope
@@ -357,13 +368,19 @@ async def ws(websocket: WebSocket):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(websocketSubcribeLoop(websocket))
+
     try:
         while True:
-            # TODO: Filter guild id
-            _, msg = await app.subSocket.recv_multipart()
-            await websocket.send_text(f"{msg.decode()}")
-    except:
-        await websocket.close()
+            msg = await websocket.receive_text()
+            await websocket.send_text(f"{msg}")
+    except Exception as e:
+        task.cancel()
+
+        if not isinstance(e, WebSocketDisconnect):
+            await websocket.close()
+
         if app._subSocket:
             app._subSocket.close()
 
