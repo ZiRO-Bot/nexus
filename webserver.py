@@ -13,12 +13,12 @@ import uvicorn
 import zmq
 import zmq.asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse
 
 from core.oauth import Guild, OAuth2Session, User
 from utils import cache
@@ -42,6 +42,7 @@ class API(FastAPI):
         super().__init__(*args, **kwargs)
         self.context = context or zmq.asyncio.Context.instance()
         self._reqSocket: zmq.asyncio.Socket | None = None
+        self._subSocket: zmq.asyncio.Socket | None = None
 
         # Auth related stuff
         self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
@@ -91,17 +92,37 @@ class API(FastAPI):
             "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
         )
 
+        self._subSocket = app.context.socket(zmq.SUB)
+        self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
+        self._subSocket.setsockopt(zmq.LINGER, 0)
+        self._subSocket.connect(
+            "tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554")
+        )
+
+    def _getSocket(self, socket: str) -> zmq.asyncio.Socket:
+        _socket = getattr(self, f"_{socket}Socket", None)
+        if not _socket:
+            self.initSockets()
+            _socket = getattr(self, socket)
+
+        return _socket
+
     @property
     def reqSocket(self) -> zmq.asyncio.Socket:
-        if not self._reqSocket:
-            self.initSockets()
-        return self._reqSocket  # type: ignore
+        return self._getSocket("req")
+
+    @property
+    def subSocket(self) -> zmq.asyncio.Socket:
+        return self._getSocket("sub")
 
     async def onStartup(self):
         self.initSockets()
 
     def close(self):
-        self.reqSocket.close()
+        if self._reqSocket:
+            self._reqSocket.close()
+        if self._subSocket:
+            self._subSocket.close()
         self.context.term()
 
     def onShutdown(self):
@@ -324,13 +345,25 @@ async def errorHandler(request, exc):
 
 
 @app.websocket("/api/ws")
-@requireValidAuth
 async def ws(websocket: WebSocket):
+    scope = websocket.scope
+    scope["type"] = "http"
+    request = Request(scope=scope, receive=websocket._receive)
+    if not request.session.get("userId"):
+        scope["type"] = "websocket"
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
+
     await websocket.accept()
-    while True:
-        data = await websocket.receive_text()
-        # TODO
-        await websocket.send_text(f"Message text was: {data}")
+
+    await websocket.send_text(str(request.session.get("userId")))
+    try:
+        while True:
+            topic, msg = await app.subSocket.recv_multipart()
+            data = json.loads(msg.decode("utf8"))
+            await websocket.send_text(f"Topic: {topic.decode('utf8')} Data: {data}")
+    except:
+        await websocket.close()
+        app._subSocket.close()
 
 
 if __name__ == "__main__":
