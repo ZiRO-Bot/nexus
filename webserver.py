@@ -96,7 +96,6 @@ class API(FastAPI):
 
         self._subSocket = app.context.socket(zmq.SUB)
         self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
-        self._subSocket.setsockopt(zmq.RCVTIMEO, 1000)
         self._subSocket.setsockopt(zmq.LINGER, 0)
         self._subSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554")
