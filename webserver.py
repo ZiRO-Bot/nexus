@@ -160,7 +160,7 @@ async def requestBot(
         return message
     except Exception as e:
         print(e)
-        return {"error": str(e)}
+        raise HTTPException(502, str(e))
 
 
 async def getch_user(request: Request) -> User:
