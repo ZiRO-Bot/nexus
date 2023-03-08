@@ -277,9 +277,10 @@ async def me(request: Request):
     return resp
 
 
-@app.get("/api/v1/@me/guilds")
+@app.get("/api/v1/@me/managed-guilds")
 @requireValidAuth
-async def myGuilds(request: Request):
+async def managedGuilds(request: Request):
+    """Get guilds that managed by the user"""
     guilds = await getch_guilds(request)
     botGuilds: list[int] = await requestBot(
         {"type": "managed-guilds"}, request.session.get("userId")
@@ -298,8 +299,17 @@ async def myGuilds(request: Request):
         )
         ret.append(guildJson)
 
-    # show invited guilds first, while also sort them by name
+    # show guilds that has the bot in it first, while also sort them by name
     return sorted(ret, key=lambda g: (not g["bot"], g["name"]))
+
+
+@app.get("/api/v1/@me/guilds")
+@requireValidAuth
+async def myGuilds(request: Request):
+    guilds = await getch_guilds(request)
+
+    # show invited guilds first, while also sort them by name
+    return [guild.json() for guild in guilds]
 
 
 @app.get("/api/v1/guild-callback")
