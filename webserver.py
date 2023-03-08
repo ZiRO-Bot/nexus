@@ -362,12 +362,14 @@ async def errorHandler(request, exc):
     return resp
 
 
-async def websocketSubcribeLoop(websocket: WebSocket):
+async def websocketSubcribeLoop(websocket: WebSocket, guildId: int):
     try:
         while True:
-            # TODO: Filter guild id
             _, msg = await app.subSocket.recv_multipart()
-            await websocket.send_text(f"{msg.decode()}")
+            decodedMsg = msg.decode()
+            if json.loads(decodedMsg)["before"].get("id") != guildId:
+                return
+            await websocket.send_text(f"{decodedMsg}")
     except Exception as e:
         print(e)
 
@@ -383,14 +385,30 @@ async def ws(websocket: WebSocket):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
-    task = asyncio.create_task(websocketSubcribeLoop(websocket))
-
+    task: asyncio.Task | None = None
     try:
         while True:
-            msg = await websocket.receive_text()
-            await websocket.send_text(f"{msg}")
+            msg = await websocket.receive_json()
+            match (msg):
+                case {"t": "ping"}:
+                    await websocket.send_json({"t": "pong"})
+                case {"t": "guild", "i": _}:
+                    if task:
+                        continue
+
+                    try:
+                        id = int(msg["i"])
+                    except ValueError:
+                        await websocket.send_json(json.dumps({"e": "Invalid ID"}))
+                        continue
+
+                    task = asyncio.create_task(websocketSubcribeLoop(websocket, id))
+                    await websocket.send_json({"i": id})
+                case _:
+                    await websocket.send_json({"o": f"{msg}"})
     except Exception as e:
-        task.cancel()
+        if task:
+            task.cancel()
 
         if not isinstance(e, WebSocketDisconnect):
             await websocket.close()
