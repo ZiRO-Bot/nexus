@@ -85,11 +85,19 @@ class API(FastAPI):
         )
         self.add_middleware(SessionMiddleware, secret_key=secretKey, max_age=None)
 
-    def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
+    def getTokenUpdater(self, request: Request = None):
+        if not request:
+            return None
+
+        def tokenUpdater(token):
+            request.session["oauthToken"] = token
+
+        return tokenUpdater
+
+    def session(self, token=None, state=None, request: Request | None = None) -> OAuth2Session:
         return OAuth2Session(
             backendObj=self,
-            token=token,
-            clientId=self.clientId,
+            token=token or getattr(request, "session", {}).get("authToken"),
             state=state,
             scope=self.scopes,
             redirectUri=self.redirectUri,
@@ -97,8 +105,7 @@ class API(FastAPI):
                 "client_id": str(self.clientId),
                 "client_secret": self.clientSecret,
             },
-            # auto_refresh_url=_oauth2['token_url'],
-            token_updater=token_updater,
+            token_updater=self.getTokenUpdater(request),
         )
 
     def initRequestSocket(self):
@@ -200,7 +207,7 @@ async def getch_user(request: Request) -> User:
     user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
-        async with app.session(token=request.session.get("authToken")) as session:
+        async with app.session(token=request.session.get("authToken"), request=request) as session:
             user = await session.identify()  # type: ignore
 
             request.session["userId"] = user.id
@@ -217,7 +224,7 @@ async def getch_guilds(request: Request) -> List[Guild]:
     guilds = app.cachedGuilds.get(userId)
 
     if not guilds:
-        async with app.session(token=request.session.get("authToken")) as session:
+        async with app.session(request=request) as session:
             guilds = await session.guilds(userId)  # type: ignore
 
     filtered = []
@@ -235,19 +242,9 @@ async def getch_guilds(request: Request) -> List[Guild]:
     return filtered
 
 
-def updateToken(request: Request):
-    def token_updater(token):
-        request.session["oauthToken"] = token
-
-    return token_updater
-
-
 @app.get("/api/login")
 async def login(request: Request):
-    # TODO:
-    #  - Store token and user ID into Session DB
-    #  - Give client unique ID and store it into browser cookie
-    session: OAuth2Session = app.session(token_updater=updateToken(request))
+    session: OAuth2Session = app.session(request=request)
     authorization_url, state = session.authorization_url()
     # authorization_url, state = session.authorization_url(prompt="none")
     request.session["state"] = state
@@ -255,16 +252,16 @@ async def login(request: Request):
     return RedirectResponse(authorization_url)
 
 
-def validateAuth(authToken: Any, authTime: int) -> bool:
-    return not any([authToken is None, int(time.time()) - authTime > 604800])
+def validateAuth(authToken: dict) -> bool:
+    # authToken = {'access_token': 'REDACTED', 'expires_in': 604800, 'refresh_token': 'REDACTED', 'scope': ['email', 'connections', 'identify', 'guilds', 'guilds.join'], 'token_type': 'Bearer', 'expires_at': 1678933659.2419164}
+
+    return not time.time() - authToken.get("expires_at", 0) >= 0
 
 
 def requireValidAuth(func):
     @wraps(func)
     async def predicate(request: Request, *args, **kwargs):
-        valid = validateAuth(
-            request.session.get("authToken"), request.session.get("authTime", 0)
-        )
+        valid = validateAuth(request.session.get("authToken") or {})
         if not valid:
             raise HTTPException(401)
 
@@ -280,21 +277,17 @@ async def callback(request: Request, code: str = None, state: str = None):
         return RedirectResponse(url=app.frontendUri)
 
     try:
-        curToken = request.session.get("authToken")
-        tokenChanged = False
-        async with app.session(token=request.session.get("authToken"), state=state) as session:  # type: ignore
+        curToken = request.session.get("authToken") or {}
+        async with app.session(state=state, request=request) as session:  # type: ignore
             session: OAuth2Session
-            if curToken and not validateAuth(curToken, request.session.get("authTime", 0)):
+            if not validateAuth(curToken):
                 curToken = await session.fetch_token(code=code, client_secret=app.clientSecret)
-                tokenChanged = True
+                request.session["authToken"] = curToken
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
         return RedirectResponse(url=app.frontendUri)
 
-    if tokenChanged:
-        request.session["authToken"] = curToken
-    request.session["authTime"] = int(time.time())
     request.session["userId"] = user.id
 
     resp = RedirectResponse(url=app.frontendUri)

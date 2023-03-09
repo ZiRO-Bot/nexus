@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 
 DISCORD_URL = "https://discord.com"
-API_URL = DISCORD_URL + "/api/v9"
+API_URL = DISCORD_URL + "/api/v10"
 TOKEN_URL = "/oauth2/token"
 AUTH_URL = API_URL + "/oauth2/authorize"
 
@@ -40,9 +40,6 @@ class OAuth2Session(aiohttp.ClientSession):
         *,
         backendObj: API,
         token=None,
-        clientId=None,
-        client=None,
-        auto_refresh_url=None,
         auto_refresh_kwargs=None,
         scope=None,
         redirectUri=None,
@@ -79,17 +76,13 @@ class OAuth2Session(aiohttp.ClientSession):
         # Client for Backend
         self.backendObj = backendObj
         # Client exclusively for Auth functions
-        self.authClient = client or WebApplicationClient(str(clientId), token=token)
+        self.authClient = WebApplicationClient(str(self.backendObj.clientId), token=token)
         self.scope = scope
         self.redirect_uri = redirectUri
         self.state = state or generate_token
         self._state = state
-        self.auto_refresh_url = auto_refresh_url or TOKEN_URL
         self.auto_refresh_kwargs = auto_refresh_kwargs or {}
         self.token_updater = token_updater
-
-        if self.token_updater:
-            assert self.auto_refresh_url, "Auto refresh URL required if token updater"
 
         # Allow customizations for non compliant providers through various
         # hooks to adjust requests and responses.
@@ -187,8 +180,6 @@ class OAuth2Session(aiohttp.ClientSession):
         verify_ssl=True,
         proxies=None,
         include_client_id=None,
-        client_id=None,
-        client_secret=None,
         **kwargs,
     ):
         """Generic method for fetching an access token from the token endpoint.
@@ -225,7 +216,6 @@ class OAuth2Session(aiohttp.ClientSession):
         :param kwargs: Extra parameters to include in the token request.
         :return: A token dict
         """
-        # print('fetch_token')
         if not is_secure_transport(API_URL + TOKEN_URL):
             raise InsecureTransportError()
 
@@ -237,39 +227,21 @@ class OAuth2Session(aiohttp.ClientSession):
             code = self.authClient.code
             log.debug("--code %s", code)
 
-        # is an auth explicitly supplied?
-        if auth is not None:
-            # if we're dealing with the default of `include_client_id` (None):
-            # we will assume the `auth` argument is for an RFC compliant server
-            # and we should not send the `client_id` in the body.
-            # This approach allows us to still force the client_id by submitting
-            # `include_client_id=True` along with an `auth` object.
-            if include_client_id is None:
-                include_client_id = False
+        clientId = self.backendObj.clientId
+        clientSecret = self.backendObj.clientSecret
 
-        # otherwise we may need to create an auth header
-        else:
-            # since we don't have an auth header, we MAY need to create one
-            # it is possible that we want to send the `client_id` in the body
-            # if so, `include_client_id` should be set to True
-            # otherwise, we will generate an auth header
-            if include_client_id is not True:
-                client_id = self.client_id
-            if client_id:
-                log.debug(
-                    'Encoding `client_id` "%s" with `client_secret` '
-                    "as Basic auth credentials.",
-                    client_id,
-                )
-                client_id = client_id
-                client_secret = client_secret if client_secret is not None else ""
-                auth = aiohttp.BasicAuth(login=client_id, password=client_secret)
+        if not auth:
+            log.debug(
+                'Encoding `client_id` "%s" with `client_secret` '
+                "as Basic auth credentials.",
+                clientId,
+            )
+            auth = aiohttp.BasicAuth(login=str(clientId), password=clientSecret)
 
         if include_client_id:
             # this was pulled out of the params
             # it needs to be passed into prepare_request_body
-            if client_secret is not None:
-                kwargs["client_secret"] = client_secret
+            kwargs["client_secret"] = clientSecret
 
         body = self.authClient.prepare_request_body(
             code=code,
@@ -331,16 +303,14 @@ class OAuth2Session(aiohttp.ClientSession):
     async def refresh_token(
         self,
         refresh_token=None,
-        body="",
         auth=None,
         timeout=None,
-        headers=None,
+        headers={},
         verify_ssl=True,
         proxies=None,
         **kwargs,
     ):
         """Fetch a new access token using a refresh token.
-        :param token_url: The token endpoint, must be HTTPS.
         :param refresh_token: The refresh_token to use.
         :param body: Optional application/x-www-form-urlencoded body to add the
                      include in the token request. Prefer kwargs over body.
@@ -362,21 +332,21 @@ class OAuth2Session(aiohttp.ClientSession):
         )
 
         kwargs.update(self.auto_refresh_kwargs)
-        body = self.authClient.prepare_refresh_body(
-            body=body, refresh_token=refresh_token, scope=self.scope, **kwargs
-        )
-        log.debug("Prepared refresh token request body %s", body)
+        data = {
+            "client_id": self.backendObj.clientId,
+            "client_secret": self.backendObj.clientSecret,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token
+        }
+        log.debug("Prepared refresh token request body %s", data)
 
-        if headers is None:
-            headers = {
-                "Accept": "application/json",
-                "Content-Type": ("application/x-www-form-urlencoded;charset=UTF-8"),
-            }
+        headers["Accept"] = "application/json"
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
 
         resp = await self.request(
             "POST",
             TOKEN_URL,
-            data=dict(urldecode(body)),
+            data=data,
             auth=auth,
             timeout=timeout,
             headers=headers,
@@ -406,8 +376,6 @@ class OAuth2Session(aiohttp.ClientSession):
         data=None,
         headers=None,
         withhold_token=False,
-        client_id=None,
-        client_secret=None,
         **kwargs,
     ):
         """Intercept all requests and add the OAuth 2 token if present."""
@@ -427,38 +395,35 @@ class OAuth2Session(aiohttp.ClientSession):
                     url, http_method=method, body=data, headers=headers
                 )
             # Attempt to retrieve and save new access token if expired
-            except TokenExpiredError as e:
-                if self.auto_refresh_url:
-                    log.debug(
-                        "Auto refresh is set, attempting to refresh at %s.",
-                        self.auto_refresh_url,
-                    )
+            except TokenExpiredError:
+                log.debug(
+                    "Auto refresh is set, attempting to refresh at %s.",
+                    TOKEN_URL,
+                )
 
-                    # We mustn't pass auth twice.
-                    auth = kwargs.pop("auth", None)
-                    if client_id and client_secret and (auth is None):
-                        log.debug(
-                            'Encoding client_id "%s" with client_secret as Basic auth credentials.',
-                            client_id,
-                        )
-                        auth = aiohttp.BasicAuth(
-                            login=client_id, password=client_secret
-                        )
-                    token = await self.refresh_token(
-                        self.auto_refresh_url, auth=auth, **kwargs
+                # We mustn't pass auth twice.
+                auth = kwargs.pop("auth", None)
+
+                if not auth:
+                    clientId = self.backendObj.clientId
+                    clientSecret = self.backendObj.clientSecret
+                    log.debug(
+                        'Encoding `client_id` "%s" with `client_secret` '
+                        "as Basic auth credentials.",
+                        clientId,
                     )
-                    if self.token_updater:
-                        log.debug(
-                            "Updating token to %s using %s.", token, self.token_updater
-                        )
-                        await self.token_updater(token)
-                        url, headers, data = self.authClient.add_token(
-                            url, http_method=method, body=data, headers=headers
-                        )
-                    else:
-                        raise TokenUpdated(token)
+                    auth = aiohttp.BasicAuth(login=str(clientId), password=clientSecret)
+                token = await self.refresh_token(auth=auth, **kwargs)
+                if self.token_updater:
+                    log.debug(
+                        "Updating token to %s using %s.", token, self.token_updater
+                    )
+                    await self.token_updater(token)
+                    url, headers, data = self.authClient.add_token(
+                        url, http_method=method, body=data, headers=headers
+                    )
                 else:
-                    raise e
+                    raise TokenUpdated(token)
 
         log.debug("Requesting url %s using method %s.", url, method)
         log.debug("Supplying headers %s and data %s", headers, data)
@@ -488,24 +453,6 @@ class OAuth2Session(aiohttp.ClientSession):
             log.debug("Invoking hook %s.", hook)
             hook_data = hook(*hook_data)
         return hook_data
-
-    # async def _discord_request(self, url_fragment, method='GET'):
-    #     if not self.token:
-    #         url = API_URL + '/oauth2/token'
-    #         self._discord_token = await self.fetch_token(
-    #             url,
-    #             code=self._discord_auth_code,
-    #             client_secret=self._discord_client_secret
-    #         )
-
-    #     token = self.token['access_token']
-    #     url = API_URL + url_fragment
-    #     headers = {
-    #         'Authorization': 'Authorization: Bearer ' + token
-    #     }
-    #     async with self.request(method, url, headers=headers) as resp:
-    #         resp.raise_for_status()
-    #         return await resp.json()
 
     async def discord_request(self, method, endpoint, **kwargs) -> Dict[Any, Any]:
         """Request discord data with rate limit handler."""
