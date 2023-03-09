@@ -66,8 +66,10 @@ class API(FastAPI):
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        secretKey = secrets.token_urlsafe(32) if DEBUG else os.getenv("DASHBOARD_SECRET_KEY", "")
         self.add_middleware(
-            SessionMiddleware, secret_key=secrets.token_urlsafe(32), max_age=None
+            SessionMiddleware, secret_key=secretKey, max_age=None
         )
 
     def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
