@@ -67,7 +67,7 @@ class API(FastAPI):
             allow_headers=["*"],
         )
 
-        secretKey = secrets.token_urlsafe(32) if DEBUG else os.getenv("DASHBOARD_SECRET_KEY", "")
+        secretKey = os.getenv("DASHBOARD_SECRET_KEY_DEBUG", "hmmmwhatsthis") if DEBUG else os.getenv("DASHBOARD_SECRET_KEY", secrets.token_urlsafe(32))
         self.add_middleware(
             SessionMiddleware, secret_key=secretKey, max_age=None
         )
