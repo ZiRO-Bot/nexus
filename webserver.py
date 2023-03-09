@@ -280,19 +280,20 @@ async def callback(request: Request, code: str = None, state: str = None):
         return RedirectResponse(url=app.frontendUri)
 
     try:
-        if request.session.get("authToken") or not code:
-            # TODO: Handle refresh token
-            raise
-
+        curToken = request.session.get("authToken")
+        tokenChanged = False
         async with app.session(token=request.session.get("authToken"), state=state) as session:  # type: ignore
             session: OAuth2Session
-            token = await session.fetch_token(code=code, client_secret=app.clientSecret)
+            if curToken and not validateAuth(curToken, request.session.get("authTime", 0)):
+                curToken = await session.fetch_token(code=code, client_secret=app.clientSecret)
+                tokenChanged = True
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
         return RedirectResponse(url=app.frontendUri)
 
-    request.session["authToken"] = token
+    if tokenChanged:
+        request.session["authToken"] = curToken
     request.session["authTime"] = int(time.time())
     request.session["userId"] = user.id
 
