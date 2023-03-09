@@ -40,6 +40,8 @@ os.environ[
 ] = "1"  # Discord response with different scope for some reason
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 LOGGER = getLogger("uvicorn")
+REQUEST_TIMEOUT = 2500
+REQUEST_RETRIES = 3
 
 
 class PrefixRequest(BaseModel):
@@ -99,17 +101,18 @@ class API(FastAPI):
             token_updater=token_updater,
         )
 
-    def initSockets(self):
+    def initRequestSocket(self):
         self._reqSocket = self.context.socket(zmq.REQ)
-        self._reqSocket.setsockopt(zmq.RCVTIMEO, 1000)
-        self._reqSocket.setsockopt(zmq.LINGER, 0)
+        self._reqSocket.setsockopt(zmq.RCVTIMEO, REQUEST_TIMEOUT)
         self._reqSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
         )
 
+    def initSockets(self):
+        self.initRequestSocket()
+
         self._subSocket = app.context.socket(zmq.SUB)
         self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
-        self._subSocket.setsockopt(zmq.LINGER, 0)
         self._subSocket.connect(
             "tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554")
         )
@@ -139,6 +142,7 @@ class API(FastAPI):
         for socket in sockets:
             if not socket:
                 continue
+            socket.setsockopt(zmq.LINGER, 0)
             socket.close()
 
         LOGGER.info("Terminating context...")
@@ -165,15 +169,31 @@ async def requestBot(requestMessage: dict, userId: str | None = None) -> dict[st
 async def requestBot(
     requestMessage: dict, userId: str | None = None
 ) -> dict[str, Any] | list[Any]:
-    try:
-        if userId:
-            requestMessage["userId"] = userId
-        await app.reqSocket.send_string(json.dumps(requestMessage))
-        message = json.loads(await app.reqSocket.recv_string())
-        return message
-    except Exception as e:
-        print(e)
-        raise HTTPException(502, str(e))
+    retries = 0
+
+    if userId:
+        requestMessage["userId"] = userId
+
+    request = json.dumps(requestMessage)
+
+    while True:
+        try:
+            await app.reqSocket.send_string(request)
+            message = json.loads(await app.reqSocket.recv_string())
+            return message
+        except Exception as e:
+            print(e)
+            if retries >= REQUEST_RETRIES:
+                raise HTTPException(502, str(e))
+
+            if app._reqSocket:
+                app._reqSocket.setsockopt(zmq.LINGER, 0)
+                app._reqSocket.close()
+            LOGGER.info("Reconnecting to bot...")
+            app.initRequestSocket()
+            retries += 1
+            LOGGER.info("Retrying...")
+            continue  # we let the loop retry the send request
 
 
 async def getch_user(request: Request) -> User:
