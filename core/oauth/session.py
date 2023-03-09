@@ -2,16 +2,18 @@ from __future__ import annotations, unicode_literals
 
 import asyncio
 import logging
-from typing import Any, Dict, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Tuple
 
 import aiohttp
 from oauthlib.common import generate_token, urldecode
-from oauthlib.oauth2 import (InsecureTransportError,
-                             TokenExpiredError, WebApplicationClient,
-                             is_secure_transport)
+from oauthlib.oauth2 import (
+    InsecureTransportError,
+    TokenExpiredError,
+    WebApplicationClient,
+    is_secure_transport,
+)
 
 from core.oauth.models import Guild, User
-
 
 if TYPE_CHECKING:
     from webserver import API

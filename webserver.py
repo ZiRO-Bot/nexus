@@ -14,7 +14,14 @@ import uvicorn
 import zmq
 import zmq.asyncio
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketException, status, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    WebSocketException,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -67,10 +74,12 @@ class API(FastAPI):
             allow_headers=["*"],
         )
 
-        secretKey = os.getenv("DASHBOARD_SECRET_KEY_DEBUG", "hmmmwhatsthis") if DEBUG else os.getenv("DASHBOARD_SECRET_KEY", secrets.token_urlsafe(32))
-        self.add_middleware(
-            SessionMiddleware, secret_key=secretKey, max_age=None
+        secretKey = (
+            os.getenv("DASHBOARD_SECRET_KEY_DEBUG", "hmmmwhatsthis")
+            if DEBUG
+            else os.getenv("DASHBOARD_SECRET_KEY", secrets.token_urlsafe(32))
         )
+        self.add_middleware(SessionMiddleware, secret_key=secretKey, max_age=None)
 
     def session(self, token=None, state=None, token_updater=None) -> OAuth2Session:
         return OAuth2Session(

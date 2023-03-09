@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 CDN_BASE = "https://cdn.discordapp.com"
 
 
@@ -35,19 +34,11 @@ class Guild(DiscordObject):
         super().__init__(data)
 
         icon = self._data.get("icon")
-        format = (
-            None
-            if not icon
-            else "gif"
-            if icon.startswith("a")
-            else "png"
-        )
+        format = None if not icon else "gif" if icon.startswith("a") else "png"
 
         self.name: str = self._data["name"]
         self.iconUrl: str | None = (
-            f"{CDN_BASE}/icons/{self.id}/{icon}.{format}"
-            if icon
-            else None
+            f"{CDN_BASE}/icons/{self.id}/{icon}.{format}" if icon else None
         )
         self.isOwner: bool | None = self._data.get("owner")
         self.features: list[str] = self._data.get("features", [])
@@ -65,13 +56,7 @@ class User(DiscordObject):
         super().__init__(data)
 
         avatar = self._data.get("avatar")
-        format = (
-            None
-            if not avatar
-            else "gif"
-            if avatar.startswith("a")
-            else "png"
-        )
+        format = None if not avatar else "gif" if avatar.startswith("a") else "png"
 
         self.name: str = self._data["username"]
         self.avatarUrl: str = (
