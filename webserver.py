@@ -7,6 +7,7 @@ import secrets
 import time
 import traceback
 from functools import wraps
+from logging import getLogger
 from typing import Any, List, overload
 
 import discord
@@ -38,6 +39,7 @@ os.environ[
     "OAUTHLIB_RELAX_TOKEN_SCOPE"
 ] = "1"  # Discord response with different scope for some reason
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
+LOGGER = getLogger("uvicorn")
 
 
 class PrefixRequest(BaseModel):
@@ -132,16 +134,16 @@ class API(FastAPI):
         self.initSockets()
 
     def close(self):
-        print("Closing sockets...")
+        LOGGER.info("Closing sockets...")
         sockets = (self._reqSocket, self._subSocket)
         for socket in sockets:
             if not socket:
                 continue
             socket.close()
 
-        print("Terminating context...")
+        LOGGER.info("Terminating context...")
         self.context.term()
-        print("ZeroMQ has been closed")
+        LOGGER.info("ZeroMQ has been closed")
 
     def onShutdown(self):
         self.close()
