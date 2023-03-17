@@ -189,7 +189,7 @@ async def requestBot(
             message = json.loads(await app.reqSocket.recv_string())
             return message
         except Exception as e:
-            print(e)
+            LOGGER.error(e)
             if retries >= REQUEST_RETRIES:
                 raise HTTPException(502, str(e))
 
@@ -203,7 +203,7 @@ async def requestBot(
             continue  # we let the loop retry the send request
 
 
-async def getch_user(request: Request) -> User:
+async def getchUser(request: Request) -> User:
     user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
@@ -215,10 +215,10 @@ async def getch_user(request: Request) -> User:
     return user
 
 
-async def getch_guilds(request: Request) -> List[Guild]:
+async def getchGuilds(request: Request) -> List[Guild]:
     userId = request.session.get("userId", 0)
     if not userId:
-        user = await getch_user(request)
+        user = await getchUser(request)
         userId = user.id
 
     guilds = app.cachedGuilds.get(userId)
@@ -234,7 +234,7 @@ async def getch_guilds(request: Request) -> List[Guild]:
             continue
 
         stats = await requestBot(
-            {"type": "guilds", "id": guild.id}, request.session.get("userId")
+            {"type": "guild-stats", "id": guild.id, "userId": userId}, str(userId)
         )
         guild._data["stats"] = stats
         filtered.append(guild)
@@ -314,7 +314,7 @@ async def callback(request: Request, code: str = None, state: str = None):
 @app.get("/api/v1/@me")
 @requireValidAuth
 async def me(request: Request):
-    user = await getch_user(request)
+    user = await getchUser(request)
     resp = JSONResponse(user.json())
 
     return resp
@@ -324,9 +324,9 @@ async def me(request: Request):
 @requireValidAuth
 async def managedGuilds(request: Request):
     """Get guilds that managed by the user"""
-    guilds = await getch_guilds(request)
+    guilds = await getchGuilds(request)
     botGuilds: list[int] = await requestBot(
-        {"type": "managed-guilds"}, request.session.get("userId")
+        {"type": "bot-guilds"}, request.session.get("userId")
     )
     ret = []
 
@@ -349,7 +349,7 @@ async def managedGuilds(request: Request):
 @app.get("/api/v1/@me/guilds")
 @requireValidAuth
 async def myGuilds(request: Request):
-    guilds = await getch_guilds(request)
+    guilds = await getchGuilds(request)
 
     # show invited guilds first, while also sort them by name
     return [guild.json() for guild in guilds]
