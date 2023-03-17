@@ -410,7 +410,7 @@ async def websocketSubcribeLoop(websocket: WebSocket, guildId: int):
         while True:
             _, msg = await app.subSocket.recv_multipart()
             decodedMsg = msg.decode()
-            if json.loads(decodedMsg)["before"].get("id") != guildId:
+            if json.loads(decodedMsg).get("guildId") != guildId:
                 return
             await websocket.send_text(f"{decodedMsg}")
     except Exception as e:
