@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse, RedirectResponse, HTMLResponse, Response
 
 from core.oauth import Guild, OAuth2Session, User
 from utils import cache
@@ -272,9 +272,26 @@ def requireValidAuth(func):
 
 @app.get("/api/v1/callback")
 async def callback(request: Request, code: str = None, state: str = None):
-    # TODO: Handle redirect (If I click login in Guild page, I should be redirected to Guild page)
-    if not code and not state:
-        return RedirectResponse(url=app.frontendUri)
+    def generateResponse(doReload: bool = True) -> Response:
+        return HTMLResponse("""
+          <html>
+            <head>
+              <title>Z3R0</title>
+            </head>
+            <body>
+              <script>
+                try {""" + ("window.opener.location.reload()" if doReload else "") + """
+                    window.close()
+                } catch {
+                    window.location.href = """ + f'"{app.frontendUri}"' + """
+                }
+              </script>
+            </body>
+          </html>
+        """)
+
+    if not code:
+        return generateResponse(False)
 
     try:
         curToken = request.session.get("authToken") or {}
@@ -286,11 +303,10 @@ async def callback(request: Request, code: str = None, state: str = None):
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
-        return RedirectResponse(url=app.frontendUri)
+        return generateResponse(False)
 
     request.session["userId"] = user.id
-
-    resp = RedirectResponse(url=app.frontendUri)
+    resp = generateResponse()
     resp.set_cookie("loggedIn", "yes", max_age=31556926)
     return resp
 
