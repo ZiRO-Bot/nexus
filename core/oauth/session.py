@@ -2,7 +2,7 @@ from __future__ import annotations, unicode_literals
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Tuple, Callable, Awaitable, Literal
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 import aiohttp
 from oauthlib.common import generate_token, urldecode
@@ -76,7 +76,9 @@ class OAuth2Session(aiohttp.ClientSession):
         # Client for Backend
         self.backendObj: API = backendObj
         # Client exclusively for Auth functions
-        self.authClient: WebApplicationClient = WebApplicationClient(str(self.backendObj.clientId), token=token)
+        self.authClient: WebApplicationClient = WebApplicationClient(
+            str(self.backendObj.clientId), token=token
+        )
         self.scope: tuple[str, ...] | None = scope
         self.redirectUri = redirectUri
         self.state: str | Callable = state or generate_token
@@ -86,13 +88,13 @@ class OAuth2Session(aiohttp.ClientSession):
 
         # Allow customizations for non compliant providers through various
         # hooks to adjust requests and responses.
-        self.compliance_hook = {
+        self.complianceHook = {
             "access_token_response": set(),
             "refresh_token_response": set(),
             "protected_request": set(),
         }
 
-    def new_state(self):
+    def newState(self):
         """Generates a state string to be used in authorizations."""
         try:
             self._state = self.state()  # type: ignore
@@ -103,40 +105,40 @@ class OAuth2Session(aiohttp.ClientSession):
         return self._state
 
     @property
-    def clientId(self):
+    def clientId(self) -> str | None:
         return getattr(self.authClient, "client_id", None)
 
     @clientId.setter
-    def clientId(self, value):
+    def clientId(self, value: str) -> None:
         self.authClient.client_id = value
 
     @clientId.deleter
-    def clientId(self):
+    def clientId(self) -> None:
         del self.authClient.client_id
 
     @property
-    def token(self):
+    def token(self) -> dict[str, Any]:
         return getattr(self.authClient, "token", {})
 
     @token.setter
-    def token(self, value):
+    def token(self, value: dict[str, Any]) -> None:
         self.authClient.token = value
         self.authClient.populate_token_attributes(value)
 
     @property
-    def accessToken(self):
+    def accessToken(self) -> str | None:
         return getattr(self.authClient, "access_token", None)
 
     @accessToken.setter
-    def accessToken(self, value):
+    def accessToken(self, value: str) -> None:
         self.authClient.access_token = value
 
     @accessToken.deleter
-    def accessToken(self):
+    def accessToken(self) -> None:
         del self.authClient.access_token
 
     @property
-    def authorized(self):
+    def authorized(self) -> bool:
         """Boolean that indicates whether this session has an OAuth token
         or not. If `self.authorized` is True, you can reasonably expect
         OAuth-protected requests to the resource to succeed. If
@@ -154,7 +156,7 @@ class OAuth2Session(aiohttp.ClientSession):
         :param kwargs: Extra parameters to include.
         :return: authorization_url, state
         """
-        state = state or self.new_state()
+        state = state or self.newState()
         return (
             self.authClient.prepare_request_uri(
                 AUTH_URL,
@@ -316,16 +318,14 @@ class OAuth2Session(aiohttp.ClientSession):
 
         refreshToken = refreshToken or self.token.get("refresh_token")
 
-        log.debug(
-            "Adding auto refresh key word arguments %s.", self.autoRefreshKwargs
-        )
+        log.debug("Adding auto refresh key word arguments %s.", self.autoRefreshKwargs)
 
         kwargs.update(self.autoRefreshKwargs)
         data = {
             "client_id": self.backendObj.clientId,
             "client_secret": self.backendObj.clientSecret,
             "grant_type": "refresh_token",
-            "refresh_token": refreshToken
+            "refresh_token": refreshToken,
         }
         log.debug("Prepared refresh token request body %s", data)
 
@@ -357,12 +357,12 @@ class OAuth2Session(aiohttp.ClientSession):
 
     async def _request(
         self,
-        method,
-        urlFragment,
+        method: str,
+        urlFragment: str,
         *,
-        data=None,
-        headers=None,
-        withhold_token=False,
+        data: dict[str, Any] = None,
+        headers: dict[str, Any] = None,
+        withholdToken: bool = False,
         **kwargs,
     ):
         """Intercept all requests and add the OAuth 2 token if present."""
@@ -371,7 +371,7 @@ class OAuth2Session(aiohttp.ClientSession):
         if not is_secure_transport(url):
             raise InsecureTransportError()
 
-        if self.token and not withhold_token:
+        if self.token and not withholdToken:
 
             url, headers, data = self._invokeHooks(
                 "protected_request", url, headers, data
@@ -417,7 +417,7 @@ class OAuth2Session(aiohttp.ClientSession):
         log.debug("Passing through key word arguments %s.", kwargs)
         return await super()._request(method, url, headers=headers, data=data, **kwargs)
 
-    def register_compliance_hook(self, hook_type, hook):
+    def registerComplianceHook(self, hookType: str, hook):
         """Register a hook for request/response tweaking.
         Available hooks are:
             access_token_response invoked before token parsing.
@@ -426,38 +426,36 @@ class OAuth2Session(aiohttp.ClientSession):
         If you find a new hook is needed please send a GitHub PR request
         or open an issue.
         """
-        if hook_type not in self.compliance_hook:
+        if hookType not in self.complianceHook:
             raise ValueError(
-                "Hook type {} is not in {}.".format(hook_type, self.compliance_hook)
+                "Hook type {} is not in {}.".format(hookType, self.complianceHook)
             )
-        self.compliance_hook[hook_type].add(hook)
+        self.complianceHook[hookType].add(hook)
 
-    def _invokeHooks(self, hook_type, *hook_data) -> Tuple[Any, ...]:
-        log.debug(
-            "Invoking %d %s hooks.", len(self.compliance_hook[hook_type]), hook_type
-        )
-        for hook in self.compliance_hook[hook_type]:
+    def _invokeHooks(self, hookType, *hookData) -> tuple[Any, ...]:
+        log.debug("Invoking %d %s hooks.", len(self.complianceHook[hookType]), hookType)
+        for hook in self.complianceHook[hookType]:
             log.debug("Invoking hook %s.", hook)
-            hook_data = hook(*hook_data)
-        return hook_data
+            hookData = hook(*hookData)
+        return hookData
 
-    async def _discordRequest(self, method, endpoint, **kwargs) -> Dict[Any, Any]:
+    async def _discordRequest(
+        self, method: str, endpoint: str, **kwargs
+    ) -> dict[Any, Any]:
         """Request discord data with rate limit handler."""
         for _ in range(5):  # 5 tries before giving up
             resp = await self._request(method, endpoint, **kwargs)
             data = await resp.json()
-
-            # print(resp.headers)
-            # print(resp.status)
 
             if resp.status == 429:
                 if not resp.headers.get("Via"):
                     # Probably banned from cloudflare
                     raise RuntimeError
 
-                retry_after: float = data["retry_after"]
+                retryAfter: float = data["retry_after"]
 
-                await asyncio.sleep(retry_after)
+                log.debug(f"Failed to request, retrying in {retryAfter}")
+                await asyncio.sleep(retryAfter)
 
                 continue
 

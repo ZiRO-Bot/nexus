@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 CDN_BASE = "https://cdn.discordapp.com"
 
 

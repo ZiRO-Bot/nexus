@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse, HTMLResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from core.oauth import Guild, OAuth2Session, User
 from utils import cache
@@ -94,7 +94,9 @@ class API(FastAPI):
 
         return tokenUpdater
 
-    def session(self, token=None, state=None, request: Request | None = None) -> OAuth2Session:
+    def session(
+        self, token=None, state=None, request: Request | None = None
+    ) -> OAuth2Session:
         return OAuth2Session(
             backendObj=self,
             token=token or getattr(request, "session", {}).get("authToken"),
@@ -207,7 +209,9 @@ async def getchUser(request: Request) -> User:
     user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
-        async with app.session(token=request.session.get("authToken"), request=request) as session:
+        async with app.session(
+            token=request.session.get("authToken"), request=request
+        ) as session:
             user = await session.identify()  # type: ignore
 
             request.session["userId"] = user.id
@@ -273,22 +277,28 @@ def requireValidAuth(func):
 @app.get("/api/v1/callback")
 async def callback(request: Request, code: str = None, state: str = None):
     def generateResponse(doReload: bool = True) -> Response:
-        return HTMLResponse("""
+        return HTMLResponse(
+            """
           <html>
             <head>
               <title>Z3R0</title>
             </head>
             <body>
               <script>
-                try {""" + ("window.opener.location.reload()" if doReload else "") + """
+                try {"""
+            + ("window.opener.location.reload()" if doReload else "")
+            + """
                     window.close()
                 } catch {
-                    window.location.href = """ + f'"{app.frontendUri}"' + """
+                    window.location.href = """
+            + f'"{app.frontendUri}"'
+            + """
                 }
               </script>
             </body>
           </html>
-        """)
+        """
+        )
 
     if not code:
         return generateResponse(False)
@@ -298,7 +308,9 @@ async def callback(request: Request, code: str = None, state: str = None):
         async with app.session(state=state, request=request) as session:  # type: ignore
             session: OAuth2Session
             if not validateAuth(curToken):
-                curToken = await session.fetchToken(code=code, client_secret=app.clientSecret)
+                curToken = await session.fetchToken(
+                    code=code, client_secret=app.clientSecret
+                )
                 request.session["authToken"] = curToken
             user = await session.identify()
     except Exception:
