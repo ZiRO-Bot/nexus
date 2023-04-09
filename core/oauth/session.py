@@ -2,7 +2,7 @@ from __future__ import annotations, unicode_literals
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Tuple, Callable, Awaitable, Literal
 
 import aiohttp
 from oauthlib.common import generate_token, urldecode
@@ -39,12 +39,12 @@ class OAuth2Session(aiohttp.ClientSession):
         self,
         *,
         backendObj: API,
-        token=None,
-        auto_refresh_kwargs=None,
-        scope=None,
-        redirectUri=None,
-        state=None,
-        token_updater=None,
+        token: str | None = None,
+        autoRefreshKwargs: dict[str, Any] = {},
+        scope: tuple[str, ...] | None = None,
+        redirectUri: str | None = None,
+        state: str | Callable | None = None,
+        tokenUpdater: Callable[..., Awaitable[None]] | None = None,
         **kwargs,
     ) -> None:
         """Construct a new OAuth 2 client session.
@@ -72,17 +72,17 @@ class OAuth2Session(aiohttp.ClientSession):
                         in its token argument.
         :param kwargs: Arguments to pass to the Session constructor.
         """
-        super(OAuth2Session, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         # Client for Backend
-        self.backendObj = backendObj
+        self.backendObj: API = backendObj
         # Client exclusively for Auth functions
-        self.authClient = WebApplicationClient(str(self.backendObj.clientId), token=token)
-        self.scope = scope
-        self.redirect_uri = redirectUri
-        self.state = state or generate_token
+        self.authClient: WebApplicationClient = WebApplicationClient(str(self.backendObj.clientId), token=token)
+        self.scope: tuple[str, ...] | None = scope
+        self.redirectUri = redirectUri
+        self.state: str | Callable = state or generate_token
         self._state = state
-        self.auto_refresh_kwargs = auto_refresh_kwargs or {}
-        self.token_updater = token_updater
+        self.autoRefreshKwargs: dict[str, Any] = autoRefreshKwargs
+        self.tokenUpdater: Callable[..., Awaitable[None]] | None = tokenUpdater
 
         # Allow customizations for non compliant providers through various
         # hooks to adjust requests and responses.
@@ -95,7 +95,7 @@ class OAuth2Session(aiohttp.ClientSession):
     def new_state(self):
         """Generates a state string to be used in authorizations."""
         try:
-            self._state = self.state()
+            self._state = self.state()  # type: ignore
             log.debug("Generated new state %s.", self._state)
         except TypeError:
             self._state = self.state
@@ -103,15 +103,15 @@ class OAuth2Session(aiohttp.ClientSession):
         return self._state
 
     @property
-    def client_id(self):
+    def clientId(self):
         return getattr(self.authClient, "client_id", None)
 
-    @client_id.setter
-    def client_id(self, value):
+    @clientId.setter
+    def clientId(self, value):
         self.authClient.client_id = value
 
-    @client_id.deleter
-    def client_id(self):
+    @clientId.deleter
+    def clientId(self):
         del self.authClient.client_id
 
     @property
@@ -124,15 +124,15 @@ class OAuth2Session(aiohttp.ClientSession):
         self.authClient.populate_token_attributes(value)
 
     @property
-    def access_token(self):
+    def accessToken(self):
         return getattr(self.authClient, "access_token", None)
 
-    @access_token.setter
-    def access_token(self, value):
+    @accessToken.setter
+    def accessToken(self, value):
         self.authClient.access_token = value
 
-    @access_token.deleter
-    def access_token(self):
+    @accessToken.deleter
+    def accessToken(self):
         del self.authClient.access_token
 
     @property
@@ -144,9 +144,9 @@ class OAuth2Session(aiohttp.ClientSession):
         authentication dance before OAuth-protected requests to the resource
         will succeed.
         """
-        return bool(self.access_token)
+        return bool(self.accessToken)
 
-    def authorization_url(self, state=None, **kwargs):
+    def authorizationUrl(self, state=None, **kwargs):
         """Form an authorization URL.
         :param url: Authorization endpoint url, must be HTTPS.
         :param state: An optional state string for CSRF protection. If not
@@ -158,7 +158,7 @@ class OAuth2Session(aiohttp.ClientSession):
         return (
             self.authClient.prepare_request_uri(
                 AUTH_URL,
-                redirect_uri=self.redirect_uri,
+                redirect_uri=self.redirectUri,
                 scope=self.scope,
                 state=state,
                 **kwargs,
@@ -166,7 +166,7 @@ class OAuth2Session(aiohttp.ClientSession):
             state,
         )
 
-    async def fetch_token(
+    async def fetchToken(
         self,
         # token_url,
         code=None,
@@ -246,7 +246,7 @@ class OAuth2Session(aiohttp.ClientSession):
         body = self.authClient.prepare_request_body(
             code=code,
             body=body,
-            redirect_uri=self.redirect_uri,
+            redirect_uri=self.redirectUri,
             include_client_id=include_client_id,
             **kwargs,
         )
@@ -282,31 +282,20 @@ class OAuth2Session(aiohttp.ClientSession):
             text = await resp.text()
 
             log.debug("Response headers were %s and content %s.", resp.headers, text)
-            (resp,) = self._invoke_hooks("access_token_response", resp)
+            (resp,) = self._invokeHooks("access_token_response", resp)
 
         self.authClient.parse_request_body_response(await resp.text(), scope=self.scope)
         token = self.authClient.token
         log.debug("Obtained token %s.", token)
         return token
 
-    def token_from_fragment(self, authorization_response):
-        """Parse token from the URI fragment, used by MobileApplicationClients.
-        :param authorization_response: The full URL of the redirect back to you
-        :return: A token dict
-        """
-        self.authClient.parse_request_uri_response(
-            authorization_response, state=self._state
-        )
-        self.token = self.authClient.token
-        return self.token
-
-    async def refresh_token(
+    async def refreshToken(
         self,
-        refresh_token=None,
-        auth=None,
-        timeout=None,
-        headers={},
-        verify_ssl=True,
+        refreshToken: str | None = None,
+        auth: tuple | None = None,
+        timeout: int | None = None,
+        headers: dict = {},
+        verify_ssl: bool = True,
         proxies=None,
         **kwargs,
     ):
@@ -325,18 +314,18 @@ class OAuth2Session(aiohttp.ClientSession):
         if not is_secure_transport(API_URL + TOKEN_URL):
             raise InsecureTransportError()
 
-        refresh_token = refresh_token or self.token.get("refresh_token")
+        refreshToken = refreshToken or self.token.get("refresh_token")
 
         log.debug(
-            "Adding auto refresh key word arguments %s.", self.auto_refresh_kwargs
+            "Adding auto refresh key word arguments %s.", self.autoRefreshKwargs
         )
 
-        kwargs.update(self.auto_refresh_kwargs)
+        kwargs.update(self.autoRefreshKwargs)
         data = {
             "client_id": self.backendObj.clientId,
             "client_secret": self.backendObj.clientSecret,
             "grant_type": "refresh_token",
-            "refresh_token": refresh_token
+            "refresh_token": refreshToken
         }
         log.debug("Prepared refresh token request body %s", data)
 
@@ -358,20 +347,18 @@ class OAuth2Session(aiohttp.ClientSession):
         log.debug("Request to refresh token completed with status %s.", resp.status)
         text = await resp.text()
         log.debug("Response headers were %s and content %s.", resp.headers, text)
-        (resp,) = self._invoke_hooks("access_token_response", resp)
+        (resp,) = self._invokeHooks("access_token_response", resp)
 
-        self.token = self.authClient.parse_request_body_response(
-            await resp.text(), scope=self.scope
-        )
+        self.token = self.authClient.parse_request_body_response(text, scope=self.scope)
         if "refresh_token" not in self.token:
             log.debug("No new refresh token given. Re-using old.")
-            self.token["refresh_token"] = refresh_token
+            self.token["refresh_token"] = refreshToken
         return self.token
 
     async def _request(
         self,
         method,
-        url_fragment,
+        urlFragment,
         *,
         data=None,
         headers=None,
@@ -379,14 +366,14 @@ class OAuth2Session(aiohttp.ClientSession):
         **kwargs,
     ):
         """Intercept all requests and add the OAuth 2 token if present."""
-        url = API_URL + url_fragment
+        url = API_URL + urlFragment
 
         if not is_secure_transport(url):
             raise InsecureTransportError()
 
         if self.token and not withhold_token:
 
-            url, headers, data = self._invoke_hooks(
+            url, headers, data = self._invokeHooks(
                 "protected_request", url, headers, data
             )
             log.debug("Adding token %s to request.", self.token)
@@ -413,12 +400,12 @@ class OAuth2Session(aiohttp.ClientSession):
                         clientId,
                     )
                     auth = aiohttp.BasicAuth(login=str(clientId), password=clientSecret)
-                token = await self.refresh_token(auth=auth, **kwargs)
-                if self.token_updater:
+                token = await self.refreshToken(auth=auth, **kwargs)
+                if self.tokenUpdater:
                     log.debug(
-                        "Updating token to %s using %s.", token, self.token_updater
+                        "Updating token to %s using %s.", token, self.tokenUpdater
                     )
-                    await self.token_updater(token)
+                    await self.tokenUpdater(token)
                     url, headers, data = self.authClient.add_token(
                         url, http_method=method, body=data, headers=headers
                     )
@@ -445,7 +432,7 @@ class OAuth2Session(aiohttp.ClientSession):
             )
         self.compliance_hook[hook_type].add(hook)
 
-    def _invoke_hooks(self, hook_type, *hook_data) -> Tuple[Any, ...]:
+    def _invokeHooks(self, hook_type, *hook_data) -> Tuple[Any, ...]:
         log.debug(
             "Invoking %d %s hooks.", len(self.compliance_hook[hook_type]), hook_type
         )
@@ -454,7 +441,7 @@ class OAuth2Session(aiohttp.ClientSession):
             hook_data = hook(*hook_data)
         return hook_data
 
-    async def discord_request(self, method, endpoint, **kwargs) -> Dict[Any, Any]:
+    async def _discordRequest(self, method, endpoint, **kwargs) -> Dict[Any, Any]:
         """Request discord data with rate limit handler."""
         for _ in range(5):  # 5 tries before giving up
             resp = await self._request(method, endpoint, **kwargs)
@@ -485,13 +472,13 @@ class OAuth2Session(aiohttp.ClientSession):
         :class:`User`
             The user who authorized the application.
         """
-        data = await self.discord_request("GET", "/users/@me")
+        data = await self._discordRequest("GET", "/users/@me")
         user = User(data=data)
         self.backendObj.cachedUser[user.id] = user
         return user
 
     async def guilds(self, user_id: int = None) -> list[Guild]:
-        data = await self.discord_request("GET", "/users/@me/guilds")
+        data = await self._discordRequest("GET", "/users/@me/guilds")
         guilds = []
         try:
             data["global"]

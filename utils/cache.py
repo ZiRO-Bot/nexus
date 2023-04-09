@@ -17,7 +17,7 @@ class ExpiringDict(dict):
     def verifyCache(self) -> None:
         curTime: float = time.monotonic()
         toRemove: list = [
-            k for (k, (v, t)) in self.items() if curTime > (t + self.maxAgeSeconds)
+            k for (k, (_, t)) in self.items() if curTime > (t + self.maxAgeSeconds)
         ]
         for k in toRemove:
             del self[k]

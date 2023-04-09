@@ -61,7 +61,7 @@ class API(FastAPI):
         self.clientSecret = os.getenv("DISCORD_CLIENT_SECRET", "")
         self.redirectUri = os.getenv("DISCORD_REDIRECT_URI", "")
         self.frontendUri = os.getenv("DASHBOARD_FRONTEND_URI", "")
-        self.scopes = ("identify", "guilds")
+        self.scopes: tuple[str, ...] = ("identify", "guilds")
 
         # Cache
         self.cachedUser = cache.ExpiringDict(maxAgeSeconds=60)
@@ -89,7 +89,7 @@ class API(FastAPI):
         if not request:
             return None
 
-        def tokenUpdater(token):
+        async def tokenUpdater(token):
             request.session["oauthToken"] = token
 
         return tokenUpdater
@@ -101,11 +101,11 @@ class API(FastAPI):
             state=state,
             scope=self.scopes,
             redirectUri=self.redirectUri,
-            auto_refresh_kwargs={
+            autoRefreshKwargs={
                 "client_id": str(self.clientId),
                 "client_secret": self.clientSecret,
             },
-            token_updater=self.getTokenUpdater(request),
+            tokenUpdater=self.getTokenUpdater(request),
         )
 
     def initRequestSocket(self):
@@ -245,7 +245,7 @@ async def getchGuilds(request: Request) -> List[Guild]:
 @app.get("/api/login")
 async def login(request: Request):
     session: OAuth2Session = app.session(request=request)
-    authorization_url, state = session.authorization_url()
+    authorization_url, state = session.authorizationUrl()
     # authorization_url, state = session.authorization_url(prompt="none")
     request.session["state"] = state
     await session.close()
@@ -298,7 +298,7 @@ async def callback(request: Request, code: str = None, state: str = None):
         async with app.session(state=state, request=request) as session:  # type: ignore
             session: OAuth2Session
             if not validateAuth(curToken):
-                curToken = await session.fetch_token(code=code, client_secret=app.clientSecret)
+                curToken = await session.fetchToken(code=code, client_secret=app.clientSecret)
                 request.session["authToken"] = curToken
             user = await session.identify()
     except Exception:

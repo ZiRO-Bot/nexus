@@ -1,5 +1,4 @@
-backend
--------
+# backend
 
 .env file:
 ```py
@@ -14,3 +13,6 @@ DASHBOARD_IS_DEBUG=1
 ```
 
 `py webserver`
+
+## License
+This software is licensed under [New BSD License](./LICENSE).

@@ -1,6 +1,4 @@
 from __future__ import annotations
-from starlette.requests import Request
-from typing import Any
 
 
 CDN_BASE = "https://cdn.discordapp.com"
