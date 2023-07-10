@@ -21,14 +21,7 @@ dependencies = [
 ]
 
 [tool.pdm.scripts]
-start = "uvicorn src.nexus.app:app --reload"
-
-[tool.pdm.build]
-excludes = ["./**/.git"]
-package-dir = "src"
-includes = ["assets/", "src/nexus"]
-source-includes = ["LICENSE", "README.md"]
-editable-backend = "path"
+start = "uvicorn nexus.app:app --reload"
 
 [build-system]
 requires = ["pdm-backend"]
