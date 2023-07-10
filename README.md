@@ -26,4 +26,4 @@ DASHBOARD_IS_DEBUG=1
 To run `nexus` you can simply run `pdm run start`
 
 ## License
-This software is licensed under [New BSD License](./LICENSE).
+This software is licensed under [MPL-2.0](./LICENSE).
