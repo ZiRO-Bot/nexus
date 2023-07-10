@@ -1,20 +1,45 @@
-[tool.poetry]
+[project]
 name = "nexus"
 version = "0.0.1"
 description = "Backend API for Z3R0"
-authors = ["null2264 <palembani@gmail.com>"]
-license = "MPL-2.0"
+authors = [
+    {name = "null2264", email = "palembani@gmail.com"}
+]
+license = {text = "MPL-2.0"}
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi==0.92.0",
+    "discord.py>=2.2",
+    "pyzmq==25.0.0",
+    "websockets>=10.4",
+    "uvicorn>=0.20.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-fastapi = "0.92.0"
-"discord.py" = "2.2"
-pyzmq = "25.0.0"
-websockets = "^10.4"
-uvicorn = "^0.20.0"
+[tool.pdm.scripts]
+start = "uvicorn src.nexus.app:app --reload"
 
-[tool.poetry.dev-dependencies]
+[tool.pdm.build]
+excludes = ["./**/.git"]
+package-dir = "src"
+includes = ["src/nexus"]
+source-includes = ["LICENSE", "README.md"]
+editable-backend = "path"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.black]
+line-length = 125
+skip-string-normalization = true
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+lines_after_imports = 2
+
+[tool.pyright]
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportUnusedImport = "error"
+pythonVersion = "3.9"
+typeCheckingMode = "basic"
