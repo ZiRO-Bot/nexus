@@ -1,8 +1,14 @@
 # `nexus`
 
+[![pdm-managed](https://img.shields.io/badge/pdm-managed-blueviolet)](https://pdm.fming.dev)
+
 Codename `nexus` is a backend API that act as a link between Z3R0 (`zibot`) and Codename `cockpit`.
 
 ## Configuration
+
+> **Note**
+>
+> This project is managed using [`pdm`](https://github.com/pdm-project/pdm), please install it for easier usage
 
 `nexus` is mainly configured via environment variables:
 
@@ -17,7 +23,7 @@ DASHBOARD_ZMQ_REQ="127.0.0.1:5556"
 DASHBOARD_IS_DEBUG=1
 ```
 
-To run `nexus` you can simply run `py webserver`
+To run `nexus` you can simply run `pdm run start`
 
 ## License
 This software is licensed under [New BSD License](./LICENSE).
