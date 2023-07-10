@@ -3,7 +3,7 @@ name = "nexus"
 version = "0.0.1"
 description = "Backend API for Z3R0"
 authors = ["null2264 <palembani@gmail.com>"]
-license = "BSD-3-Clause"
+license = "MPL-2.0"
 
 [tool.poetry.dependencies]
 python = "^3.10"
