@@ -8,7 +8,7 @@ import time
 import traceback
 from functools import wraps
 from logging import getLogger
-from typing import Any, List, overload
+from typing import Any, List, Optional, Union, overload
 
 import discord
 import uvicorn
@@ -29,15 +29,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
-from core.oauth import Guild, OAuth2Session, User
-from utils import cache
+from nexus.core.oauth import Guild, OAuth2Session, User
+from nexus.utils import cache
+
 
 load_dotenv()
 
 
-os.environ[
-    "OAUTHLIB_RELAX_TOKEN_SCOPE"
-] = "1"  # Discord response with different scope for some reason
+os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"  # Discord response with different scope for some reason
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 LOGGER = getLogger("uvicorn")
 REQUEST_TIMEOUT = 2500
@@ -50,11 +49,11 @@ class PrefixRequest(BaseModel):
 
 
 class API(FastAPI):
-    def __init__(self, context: zmq.asyncio.Context = None, *args, **kwargs):
+    def __init__(self, context: Optional[zmq.asyncio.Context] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.context = context or zmq.asyncio.Context.instance()
-        self._reqSocket: zmq.asyncio.Socket | None = None
-        self._subSocket: zmq.asyncio.Socket | None = None
+        self._reqSocket: Optional[zmq.asyncio.Socket] = None
+        self._subSocket: Optional[zmq.asyncio.Socket] = None
 
         # Auth related stuff
         self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
@@ -85,7 +84,7 @@ class API(FastAPI):
         )
         self.add_middleware(SessionMiddleware, secret_key=secretKey, max_age=None)
 
-    def getTokenUpdater(self, request: Request = None):
+    def getTokenUpdater(self, request: Optional[Request] = None):
         if not request:
             return None
 
@@ -94,9 +93,7 @@ class API(FastAPI):
 
         return tokenUpdater
 
-    def session(
-        self, token=None, state=None, request: Request | None = None
-    ) -> OAuth2Session:
+    def session(self, token=None, state=None, request: Optional[Request] = None) -> OAuth2Session:
         return OAuth2Session(
             backendObj=self,
             token=token or getattr(request, "session", {}).get("authToken"),
@@ -113,18 +110,14 @@ class API(FastAPI):
     def initRequestSocket(self):
         self._reqSocket = self.context.socket(zmq.REQ)
         self._reqSocket.setsockopt(zmq.RCVTIMEO, REQUEST_TIMEOUT)
-        self._reqSocket.connect(
-            "tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556")
-        )
+        self._reqSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556"))
 
     def initSockets(self):
         self.initRequestSocket()
 
         self._subSocket = app.context.socket(zmq.SUB)
         self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
-        self._subSocket.connect(
-            "tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554")
-        )
+        self._subSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554"))
 
     def _getSocket(self, socket: str) -> zmq.asyncio.Socket:
         _socket = getattr(self, f"_{socket}Socket", None)
@@ -166,18 +159,16 @@ app = API(debug=DEBUG)
 
 
 @overload
-async def requestBot(requestMessage: dict, userId: str | None = None) -> list[Any]:
+async def requestBot(requestMessage: dict, userId: Optional[str] = None) -> list[Any]:
     ...
 
 
 @overload
-async def requestBot(requestMessage: dict, userId: str | None = None) -> dict[str, Any]:
+async def requestBot(requestMessage: dict, userId: Optional[str] = None) -> dict[str, Any]:
     ...
 
 
-async def requestBot(
-    requestMessage: dict, userId: str | None = None
-) -> dict[str, Any] | list[Any]:
+async def requestBot(requestMessage: dict, userId: Optional[str] = None) -> Union[dict[str, Any], list[Any]]:
     retries = 0
 
     if userId:
@@ -209,9 +200,7 @@ async def getchUser(request: Request) -> User:
     user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
-        async with app.session(
-            token=request.session.get("authToken"), request=request
-        ) as session:
+        async with app.session(token=request.session.get("authToken"), request=request) as session:
             user = await session.identify()  # type: ignore
 
             request.session["userId"] = user.id
@@ -237,9 +226,7 @@ async def getchGuilds(request: Request) -> List[Guild]:
         if (guild.permissions & 1 << 4) != 1 << 4:
             continue
 
-        stats = await requestBot(
-            {"type": "guild-stats", "id": guild.id, "userId": userId}, str(userId)
-        )
+        stats = await requestBot({"type": "guild-stats", "id": guild.id, "userId": userId}, str(userId))
         guild._data["stats"] = stats
         filtered.append(guild)
 
@@ -275,7 +262,7 @@ def requireValidAuth(func):
 
 
 @app.get("/api/v1/callback")
-async def callback(request: Request, code: str = None, state: str = None):
+async def callback(request: Request, code: Optional[str] = None, state: Optional[str] = None):
     def generateResponse(doReload: bool = True) -> Response:
         return HTMLResponse(
             """
@@ -308,9 +295,7 @@ async def callback(request: Request, code: str = None, state: str = None):
         async with app.session(state=state, request=request) as session:  # type: ignore
             session: OAuth2Session
             if not validateAuth(curToken):
-                curToken = await session.fetchToken(
-                    code=code, client_secret=app.clientSecret
-                )
+                curToken = await session.fetchToken(code=code, client_secret=app.clientSecret)
                 request.session["authToken"] = curToken
             user = await session.identify()
     except Exception:
@@ -337,9 +322,7 @@ async def me(request: Request):
 async def managedGuilds(request: Request):
     """Get guilds that managed by the user"""
     guilds = await getchGuilds(request)
-    botGuilds: list[int] = await requestBot(
-        {"type": "bot-guilds"}, request.session.get("userId")
-    )
+    botGuilds: list[int] = await requestBot({"type": "bot-guilds"}, request.session.get("userId"))
     ret = []
 
     for guild in guilds:
@@ -376,9 +359,7 @@ async def guildAuth(request: Request, guild_id: int):
 @app.get("/api/v1/guildstats")
 @requireValidAuth
 async def guildStats(request: Request, guild_id: int):
-    return await requestBot(
-        {"type": "guild", "id": guild_id}, request.session.get("userId")
-    )
+    return await requestBot({"type": "guild", "id": guild_id}, request.session.get("userId"))
 
 
 @app.post("/api/logout")
@@ -440,27 +421,27 @@ async def ws(websocket: WebSocket):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 
     await websocket.accept()
-    task: asyncio.Task | None = None
+    task: Optional[asyncio.Task] = None
     try:
         while True:
             msg = await websocket.receive_json()
-            match (msg):
-                case {"t": "ping"}:
-                    await websocket.send_json({"t": "pong"})
-                case {"t": "guild", "i": _}:
-                    if task:
-                        continue
+            _type = msg.get("t")
+            if _type == "ping":
+                await websocket.send_json({"t": "pong"})
+            elif _type == "guild":
+                if task:
+                    continue
 
-                    try:
-                        id = int(msg["i"])
-                    except ValueError:
-                        await websocket.send_json(json.dumps({"e": "Invalid ID"}))
-                        continue
+                try:
+                    id = int(msg["i"])
+                except ValueError:
+                    await websocket.send_json(json.dumps({"e": "Invalid ID"}))
+                    continue
 
-                    task = asyncio.create_task(websocketSubcribeLoop(websocket, id))
-                    await websocket.send_json({"i": id})
-                case _:
-                    await websocket.send_json({"o": f"{msg}"})
+                task = asyncio.create_task(websocketSubcribeLoop(websocket, id))
+                await websocket.send_json({"i": id})
+            else:
+                await websocket.send_json({"o": f"{msg}"})
     except Exception as e:
         if task:
             task.cancel()

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from typing import Optional
+
+
 CDN_BASE = "https://cdn.discordapp.com"
 
 
@@ -37,10 +40,8 @@ class Guild(DiscordObject):
         format = None if not icon else "gif" if icon.startswith("a") else "png"
 
         self.name: str = self._data["name"]
-        self.iconUrl: str | None = (
-            f"{CDN_BASE}/icons/{self.id}/{icon}.{format}" if icon else None
-        )
-        self.isOwner: bool | None = self._data.get("owner")
+        self.iconUrl: Optional[str] = f"{CDN_BASE}/icons/{self.id}/{icon}.{format}" if icon else None
+        self.isOwner: Optional[bool] = self._data.get("owner")
         self.features: list[str] = self._data.get("features", [])
         self.permissions: int = int(self._data.get("permissions", 0))
 
@@ -65,9 +66,9 @@ class User(DiscordObject):
             else f"{CDN_BASE}/embed/avatars/{int(self.discriminator) % 5}.png"
         )
         self.discriminator: int = self._data["discriminator"]
-        self.mfaEnabled: bool | None = self._data.get("mfa_enabled")
-        self.email: str | None = self._data.get("email")
-        self.verified: bool | None = self._data.get("verified")
+        self.mfaEnabled: Optional[bool] = self._data.get("mfa_enabled")
+        self.email: Optional[str] = self._data.get("email")
+        self.verified: Optional[bool] = self._data.get("verified")
 
         # self.guilds: List[Guild] = []  # this is filled in when fetch_guilds is called
 
@@ -75,9 +76,7 @@ class User(DiscordObject):
         return "{0.name}#{0.discriminator}".format(self)
 
     def __repr__(self) -> str:
-        return "<User id={0.id} name={0.name} discriminator={0.discriminator} verified={0.verified}>".format(
-            self
-        )
+        return "<User id={0.id} name={0.name} discriminator={0.discriminator} verified={0.verified}>".format(self)
 
     def json(self):
         """Returns the original JSON data for this model."""

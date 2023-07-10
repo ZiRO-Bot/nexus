@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import aiohttp
 
 from .errors import HTTPException
+
 
 __all__: tuple = ("Route", "HTTPClient")
 
@@ -17,7 +20,7 @@ class Route:
 
 class HTTPClient:
     def __init__(self):
-        self.__session: aiohttp.ClientSession | None = None  # filled in later
+        self.__session: Optional[aiohttp.ClientSession] = None
         self._state_info = {}  # client fills this
 
     async def _createSession(self) -> aiohttp.ClientSession:

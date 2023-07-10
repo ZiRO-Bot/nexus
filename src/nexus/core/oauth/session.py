@@ -2,7 +2,7 @@ from __future__ import annotations, unicode_literals
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, Union
 
 import aiohttp
 from oauthlib.common import generate_token, urldecode
@@ -13,10 +13,11 @@ from oauthlib.oauth2 import (
     is_secure_transport,
 )
 
-from core.oauth.models import Guild, User
+from nexus.core.oauth.models import Guild, User
+
 
 if TYPE_CHECKING:
-    from webserver import API
+    from nexus.app import API
 
 
 log = logging.getLogger(__name__)
@@ -39,12 +40,12 @@ class OAuth2Session(aiohttp.ClientSession):
         self,
         *,
         backendObj: API,
-        token: str | None = None,
+        token: Optional[str] = None,
         autoRefreshKwargs: dict[str, Any] = {},
-        scope: tuple[str, ...] | None = None,
-        redirectUri: str | None = None,
-        state: str | Callable | None = None,
-        tokenUpdater: Callable[..., Awaitable[None]] | None = None,
+        scope: Optional[tuple[str, ...]] = None,
+        redirectUri: Optional[str] = None,
+        state: Optional[Union[str, Callable]] = None,
+        tokenUpdater: Optional[Callable[..., Awaitable[None]]] = None,
         **kwargs,
     ) -> None:
         """Construct a new OAuth 2 client session.
@@ -76,15 +77,13 @@ class OAuth2Session(aiohttp.ClientSession):
         # Client for Backend
         self.backendObj: API = backendObj
         # Client exclusively for Auth functions
-        self.authClient: WebApplicationClient = WebApplicationClient(
-            str(self.backendObj.clientId), token=token
-        )
-        self.scope: tuple[str, ...] | None = scope
+        self.authClient: WebApplicationClient = WebApplicationClient(str(self.backendObj.clientId), token=token)
+        self.scope: Optional[tuple[str, ...]] = scope
         self.redirectUri = redirectUri
-        self.state: str | Callable = state or generate_token
+        self.state: Union[str, Callable] = state or generate_token
         self._state = state
         self.autoRefreshKwargs: dict[str, Any] = autoRefreshKwargs
-        self.tokenUpdater: Callable[..., Awaitable[None]] | None = tokenUpdater
+        self.tokenUpdater: Optional[Callable[..., Awaitable[None]]] = tokenUpdater
 
         # Allow customizations for non compliant providers through various
         # hooks to adjust requests and responses.
@@ -105,7 +104,7 @@ class OAuth2Session(aiohttp.ClientSession):
         return self._state
 
     @property
-    def clientId(self) -> str | None:
+    def clientId(self) -> Optional[str]:
         return getattr(self.authClient, "client_id", None)
 
     @clientId.setter
@@ -126,7 +125,7 @@ class OAuth2Session(aiohttp.ClientSession):
         self.authClient.populate_token_attributes(value)
 
     @property
-    def accessToken(self) -> str | None:
+    def accessToken(self) -> Optional[str]:
         return getattr(self.authClient, "access_token", None)
 
     @accessToken.setter
@@ -223,9 +222,7 @@ class OAuth2Session(aiohttp.ClientSession):
 
         if not code and authorization_response:
             log.debug("-- response %s", authorization_response)
-            self.authClient.parse_request_uri_response(
-                str(authorization_response), state=self._state
-            )
+            self.authClient.parse_request_uri_response(str(authorization_response), state=self._state)
             code = self.authClient.code
             log.debug("--code %s", code)
 
@@ -234,8 +231,7 @@ class OAuth2Session(aiohttp.ClientSession):
 
         if not auth:
             log.debug(
-                'Encoding `client_id` "%s" with `client_secret` '
-                "as Basic auth credentials.",
+                'Encoding `client_id` "%s" with `client_secret` ' "as Basic auth credentials.",
                 clientId,
             )
             auth = aiohttp.BasicAuth(login=str(clientId), password=clientSecret)
@@ -260,9 +256,7 @@ class OAuth2Session(aiohttp.ClientSession):
         token = {}
         request_kwargs = {}
         if method.upper() == "POST":
-            request_kwargs["params" if force_querystring else "data"] = dict(
-                urldecode(body)
-            )
+            request_kwargs["params" if force_querystring else "data"] = dict(urldecode(body))
         elif method.upper() == "GET":
             request_kwargs["params"] = dict(urldecode(body))
         else:
@@ -372,15 +366,10 @@ class OAuth2Session(aiohttp.ClientSession):
             raise InsecureTransportError()
 
         if self.token and not withholdToken:
-
-            url, headers, data = self._invokeHooks(
-                "protected_request", url, headers, data
-            )
+            url, headers, data = self._invokeHooks("protected_request", url, headers, data)
             log.debug("Adding token %s to request.", self.token)
             try:
-                url, headers, data = self.authClient.add_token(
-                    url, http_method=method, body=data, headers=headers
-                )
+                url, headers, data = self.authClient.add_token(url, http_method=method, body=data, headers=headers)
             # Attempt to retrieve and save new access token if expired
             except TokenExpiredError:
                 log.debug(
@@ -395,20 +384,15 @@ class OAuth2Session(aiohttp.ClientSession):
                     clientId = self.backendObj.clientId
                     clientSecret = self.backendObj.clientSecret
                     log.debug(
-                        'Encoding `client_id` "%s" with `client_secret` '
-                        "as Basic auth credentials.",
+                        'Encoding `client_id` "%s" with `client_secret` ' "as Basic auth credentials.",
                         clientId,
                     )
                     auth = aiohttp.BasicAuth(login=str(clientId), password=clientSecret)
                 token = await self.refreshToken(auth=auth, **kwargs)
                 if self.tokenUpdater:
-                    log.debug(
-                        "Updating token to %s using %s.", token, self.tokenUpdater
-                    )
+                    log.debug("Updating token to %s using %s.", token, self.tokenUpdater)
                     await self.tokenUpdater(token)
-                    url, headers, data = self.authClient.add_token(
-                        url, http_method=method, body=data, headers=headers
-                    )
+                    url, headers, data = self.authClient.add_token(url, http_method=method, body=data, headers=headers)
                 else:
                     raise TokenUpdated(token)
 
@@ -427,9 +411,7 @@ class OAuth2Session(aiohttp.ClientSession):
         or open an issue.
         """
         if hookType not in self.complianceHook:
-            raise ValueError(
-                "Hook type {} is not in {}.".format(hookType, self.complianceHook)
-            )
+            raise ValueError("Hook type {} is not in {}.".format(hookType, self.complianceHook))
         self.complianceHook[hookType].add(hook)
 
     def _invokeHooks(self, hookType, *hookData) -> tuple[Any, ...]:
@@ -439,9 +421,7 @@ class OAuth2Session(aiohttp.ClientSession):
             hookData = hook(*hookData)
         return hookData
 
-    async def _discordRequest(
-        self, method: str, endpoint: str, **kwargs
-    ) -> dict[Any, Any]:
+    async def _discordRequest(self, method: str, endpoint: str, **kwargs) -> dict[Any, Any]:
         """Request discord data with rate limit handler."""
         for _ in range(5):  # 5 tries before giving up
             resp = await self._request(method, endpoint, **kwargs)
