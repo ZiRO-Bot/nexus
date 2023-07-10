@@ -19,7 +19,7 @@ DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
 
 app = Nexus(debug=DEBUG)
-app.include_router(routes.legacy.google.router, prefix=constants.PREFIX_V1)
+# app.include_router(routes.legacy.google.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.legacy.imagemanip.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.ng.core.router, prefix=constants.PREFIX_V2)
 app.include_router(routes.ng.meta.router, prefix=constants.PREFIX_V2)
