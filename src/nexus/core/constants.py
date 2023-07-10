@@ -1,0 +1,5 @@
+REQUEST_TIMEOUT = 2500
+REQUEST_RETRIES = 3
+PREFIX = "/api"
+PREFIX_V1 = "/api/v1"
+PREFIX_V2 = "/api/v2"

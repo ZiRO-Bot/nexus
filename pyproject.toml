@@ -16,6 +16,8 @@ dependencies = [
     "python-dotenv==1.0.0",
     "itsdangerous>=2.1.2",
     "oauthlib>=3.2.2",
+    "beautifulsoup4>=4.12.2",
+    "Pillow>=10.0.0",
 ]
 
 [tool.pdm.scripts]
@@ -24,7 +26,7 @@ start = "uvicorn src.nexus.app:app --reload"
 [tool.pdm.build]
 excludes = ["./**/.git"]
 package-dir = "src"
-includes = ["src/nexus"]
+includes = ["assets/", "src/nexus"]
 source-includes = ["LICENSE", "README.md"]
 editable-backend = "path"
 
@@ -46,3 +48,6 @@ reportUnnecessaryTypeIgnoreComment = "warning"
 reportUnusedImport = "error"
 pythonVersion = "3.9"
 typeCheckingMode = "basic"
+
+[tool.pylint.main]
+extension-pkg-allow-list = ["pydantic"]
