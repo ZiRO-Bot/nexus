@@ -81,12 +81,18 @@ class Nexus(FastAPI):
         self._reqSocket.setsockopt(zmq.RCVTIMEO, constants.REQUEST_TIMEOUT)
         self._reqSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556"))
 
-    def initSockets(self):
-        self.initRequestSocket()
-
+    def initSubscriptionSocket(self):
         self._subSocket = self.context.socket(zmq.SUB)
         self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
         self._subSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554"))
+
+    def initSockets(self):
+        self.initRequestSocket()
+        self.initSubscriptionSocket()
+
+    @property
+    def isZMQAvailable(self) -> bool:
+        return self._reqSocket is not None or self._subSocket is not None
 
     def _getSocket(self, socket: str) -> zmq.asyncio.Socket:
         _socket = getattr(self, f"_{socket}Socket", None)
