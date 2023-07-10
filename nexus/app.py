@@ -18,7 +18,7 @@ os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"  # Discord response with differen
 DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
 
-app = Nexus(debug=DEBUG)
+app = Nexus(debug=DEBUG, docs_url=None, redoc_url=None)
 # app.include_router(routes.legacy.google.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.legacy.imagemanip.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.ng.core.router, prefix=constants.PREFIX_V2)
