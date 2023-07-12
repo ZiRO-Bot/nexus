@@ -16,9 +16,10 @@ RUN pip install -U pip setuptools wheel
 RUN pip install pdm
 RUN python -m venv /venv
 
-COPY pyproject.toml pdm.lock ./
+COPY pyproject.toml pdm.lock uvicorn.patch ./
 ADD nexus/ ./nexus
 RUN pdm sync --prod --no-editable
+RUN patch "${VIRTUAL_ENV}/lib/**/sites-packages/uvicorn/main.py" < ./uvicorn.patch
 
 # ---
 FROM base as final
