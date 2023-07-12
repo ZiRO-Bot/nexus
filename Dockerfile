@@ -14,6 +14,7 @@ ENV PATH="/root/.local/bin:${PATH}" \
 
 RUN pip install -U pip setuptools wheel
 RUN pip install pdm
+RUN python -m venv /venv
 
 COPY pyproject.toml pdm.lock ./
 ADD nexus/ ./nexus
