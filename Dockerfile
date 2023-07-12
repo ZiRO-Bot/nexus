@@ -16,7 +16,6 @@ RUN mkdir __pypackages__ && pdm sync --prod --no-editable
 # ---
 FROM base as final
 
-ENV PYTHONPATH=/project/pkgs
-COPY --from=builder /project/__pypackages__/3.10/lib /project/pkgs
+COPY --from=builder /project/nexus /project/nexus
 
 CMD ["uvicorn", "nexus.app:app", "--proxy-headers", "--host", "0.0.0.0", "--port", "80"]
