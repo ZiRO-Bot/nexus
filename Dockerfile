@@ -19,7 +19,7 @@ RUN python -m venv /venv
 COPY pyproject.toml pdm.lock uvicorn.patch ./
 ADD nexus/ ./nexus
 RUN pdm sync --prod --no-editable
-RUN patch "${VIRTUAL_ENV}/lib/**/sites-packages/uvicorn/main.py" < ./uvicorn.patch
+RUN patch /venv/lib/**/sites-packages/uvicorn/main.py < /app/uvicorn.patch
 
 # ---
 FROM base as final
