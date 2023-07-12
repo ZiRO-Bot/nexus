@@ -16,7 +16,7 @@ RUN pip install -U pip setuptools wheel
 RUN pip install pdm
 RUN python -m venv /venv
 
-COPY pyproject.toml pdm.lock ./
+COPY pyproject.toml pdm.lock assets/ ./
 ADD nexus/ ./nexus
 RUN pdm sync --prod --no-editable
 
