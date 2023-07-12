@@ -8,7 +8,7 @@ RUN pip install -U pip setuptools wheel
 RUN pip install pdm
 
 COPY pyproject.toml pdm.lock README.md /project/
-COPY src/ /project/src
+COPY nexus/ /project/nexus
 
 WORKDIR /project
 RUN mkdir __pypackages__ && pdm sync --prod --no-editable
