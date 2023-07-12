@@ -25,5 +25,11 @@ DASHBOARD_IS_DEBUG=1
 
 To run `nexus` you can simply run `pdm run start`
 
+For dual stacking you can use hypercorn:
+
+```zsh
+hypercorn nexus.app:app --bind "0.0.0.0:8000" --bind "[::]:8000"
+```
+
 ## License
 This software is licensed under [MPL-2.0](./LICENSE).
