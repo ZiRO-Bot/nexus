@@ -12,7 +12,7 @@ WORKDIR /app
 ENV PATH="/root/.local/bin:${PATH}" \
     VIRTUAL_ENV="/venv"
 
-RUN apt install patch
+RUN apt-get update && apt-get install -y patch
 RUN pip install -U pip setuptools wheel
 RUN pip install pdm
 RUN python -m venv /venv
