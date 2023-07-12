@@ -18,7 +18,6 @@ dependencies = [
     "oauthlib>=3.2.2",
     "beautifulsoup4>=4.12.2",
     "Pillow>=10.0.0",
-    "hypercorn>=0.14.4",
 ]
 
 [tool.pdm.scripts]

@@ -25,10 +25,10 @@ DASHBOARD_IS_DEBUG=1
 
 To run `nexus` you can simply run `pdm run start`
 
-For dual stacking you can use hypercorn:
+For dual stacking (listening to IPv4 and IPv6) you just need to not use `--host` flag:
 
 ```zsh
-hypercorn nexus.app:app --bind "0.0.0.0:8000" --bind "[::]:8000"
+uvicorn nexus.app:app --port 80
 ```
 
 ## License
