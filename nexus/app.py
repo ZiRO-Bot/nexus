@@ -23,7 +23,7 @@ app = Nexus(debug=DEBUG, docs_url=None, redoc_url=None)
 app.include_router(routes.legacy.imagemanip.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.ng.core.router, prefix=constants.PREFIX_V2)
 app.include_router(routes.ng.meta.router, prefix=constants.PREFIX_V2)
-app.include_router(routes.auth.router, prefix=constants.PREFIX)
+app.include_router(routes.auth.router)
 
 
 @app.exception_handler(HTTPException)
