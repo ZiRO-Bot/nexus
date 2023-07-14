@@ -56,7 +56,7 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
 
     request.session["userId"] = user.id
     resp = generateResponse()
-    resp.set_cookie("loggedIn", "yes", max_age=31556926)
+    request.app.attachIsLoggedIn(resp)
     return resp
 
 

@@ -5,7 +5,7 @@ from typing import Optional
 
 import zmq
 import zmq.asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
@@ -109,6 +109,9 @@ class Nexus(FastAPI):
     @property
     def subSocket(self) -> zmq.asyncio.Socket:
         return self._getSocket("sub")
+
+    def attachIsLoggedIn(self, response: Response):
+        response.set_cookie("loggedIn", "yes", domain=os.getenv("DASHBOARD_HOSTNAME"), max_age=31556926)
 
     async def onStartup(self):
         self.initSockets()
