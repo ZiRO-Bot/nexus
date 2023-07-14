@@ -4,7 +4,7 @@ import traceback
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException, status
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.routing import APIRouter
 from starlette.requests import Request
 
@@ -57,6 +57,17 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
     request.session["userId"] = user.id
     resp = generateResponse()
     request.app.attachIsLoggedIn(resp)
+    return resp
+
+
+@router.get("/ping")
+async def ping(request: Request):
+    isLoggedIn = validateAuth(request.session.get("authToken") or {})
+    resp = JSONResponse({"isLoggedIn": isLoggedIn})
+    if isLoggedIn:
+        request.app.attachIsLoggedIn(resp)
+    else:
+        request.app.detachIsLoggedIn(resp)
     return resp
 
 
