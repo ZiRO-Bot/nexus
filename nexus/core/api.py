@@ -7,10 +7,10 @@ import zmq
 import zmq.asyncio
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 
 from nexus.core import constants
+from nexus.core.middleware import SessionMiddleware
 from nexus.core.oauth import OAuth2Session
 from nexus.utils import cache
 
