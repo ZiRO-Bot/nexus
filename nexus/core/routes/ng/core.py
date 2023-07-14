@@ -27,7 +27,7 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
             <body>
               <script>
                 if (window.opener) {"{"}
-                    window.opener.postMessage({"{ message: 'authSuccess' }"}, "*")
+                    window.opener.postMessage({"{ message: 'authSuccess' }" if (doReload) else "{ message: 'authFailed' }"}, "*")
                     window.opener.focus()
                     window.close()
                 {"} else {"}
