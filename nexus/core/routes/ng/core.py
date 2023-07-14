@@ -19,22 +19,20 @@ router = APIRouter()
 async def callback(request: Request, code: Optional[str] = None, state: Optional[str] = None):
     def generateResponse(doReload: bool = True) -> Response:
         return HTMLResponse(
-            """
+            f"""
           <html>
             <head>
               <title>Z3R0</title>
             </head>
             <body>
               <script>
-                try {"""
-            + ("window.opener.location.reload()" if doReload else "")
-            + """
+                if (window.opener) {"{"}
+                    window.opener.postMessage({"{ message: 'authSuccess' }"}, "*")
+                    window.opener.focus()
                     window.close()
-                } catch {
-                    window.location.href = """
-            + f'"{request.app.frontendUri}"'
-            + """
-                }
+                {"} else {"}
+                    window.location.href = "{request.app.frontendUri}"
+                {"}"}
               </script>
             </body>
           </html>
