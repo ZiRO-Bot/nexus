@@ -49,7 +49,12 @@ class Nexus(FastAPI):
             if self.debug
             else os.getenv("DASHBOARD_SECRET_KEY", secrets.token_urlsafe(32))
         )
-        self.add_middleware(SessionMiddleware, secret_key=secretKey, max_age=None)
+        self.add_middleware(
+            SessionMiddleware,
+            session_cookie="user_session",
+            secret_key=secretKey,
+            max_age=None if (self.debug) else 14 * 24 * 60 * 60,
+        )
 
         self.logger = getLogger("uvicorn")
 
