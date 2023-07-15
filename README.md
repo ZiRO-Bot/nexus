@@ -17,11 +17,17 @@ DISCORD_CLIENT_ID=0
 DISCORD_CLIENT_SECRET=""
 DISCORD_REDIRECT_URI="http://127.0.0.1:8000/api/callback"
 DASHBOARD_FRONTEND_URI="http://127.0.0.1"
-DASHBOARD_HOSTNAME="127.0.0.1"
+DASHBOARD_HOSTNAME="127.0.0.1"  # mainly for cookie domain
 DASHBOARD_ZMQ_SUB="127.0.0.1:5554"
+# in docker-compose you can do something like this depending on your setup
+# DASHBOARD_ZMQ_SUB="zibot.internal:5554"
 DASHBOARD_ZMQ_PUB="127.0.0.1:5555"
 DASHBOARD_ZMQ_REQ="127.0.0.1:5556"
+# you should set this to 0 on prod
 DASHBOARD_IS_DEBUG=1
+# you should set this with strong passkey on prod
+# leaving it empty will make nexus generate a random key by default on prod (on DEBUG=0) on boot
+DASHBOARD_SECRET_KEY="you shall not pass"
 ```
 
 To run `nexus` you can simply run `pdm run start`

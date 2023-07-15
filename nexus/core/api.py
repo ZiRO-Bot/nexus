@@ -47,7 +47,7 @@ class Nexus(FastAPI):
         secretKey = (
             os.getenv("DASHBOARD_SECRET_KEY_DEBUG", "hmmmwhatsthis")
             if self.debug
-            else os.getenv("DASHBOARD_SECRET_KEY", secrets.token_urlsafe(32))
+            else os.getenv("DASHBOARD_SECRET_KEY") or secrets.token_urlsafe(32)
         )
         self.add_middleware(
             SessionMiddleware,
