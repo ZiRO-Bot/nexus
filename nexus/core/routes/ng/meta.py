@@ -115,7 +115,7 @@ async def me(request: Request):
 async def managedGuilds(request: Request):
     """Get guilds that managed by the user"""
     guilds = await getchGuilds(request)
-    botGuilds: list[int] = await requestBot(request.app, {"type": "bot-guilds"}, request.session.get("userId"))
+    botGuilds: list[int] = await requestBot(request.app, {"type": "managed-guilds"}, request.session.get("userId"))
     ret = []
 
     for guild in guilds:
@@ -126,7 +126,7 @@ async def managedGuilds(request: Request):
             request.app.clientId,
             permissions=discord.Permissions(4260883702),
             guild=guild,
-            redirect_uri="http://127.0.0.1/api/guild-callback",
+            # redirect_uri=os.getenv("DISCORD_GUILD_REDIRECT_URI"),
         )
         ret.append(guildJson)
 

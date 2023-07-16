@@ -15,7 +15,8 @@ Codename `nexus` is a backend API that act as a link between Z3R0 (`zibot`) and 
 ```py
 DISCORD_CLIENT_ID=0
 DISCORD_CLIENT_SECRET=""
-DISCORD_REDIRECT_URI="http://127.0.0.1:8000/api/callback"
+DISCORD_REDIRECT_URI="http://127.0.0.1:8000/callback"
+DISCORD_GUILD_REDIRECT_URI="http://127.0.0.1:8000/guild-callback"
 DASHBOARD_FRONTEND_URI="http://127.0.0.1"
 DASHBOARD_HOSTNAME="127.0.0.1"  # mainly for cookie domain
 DASHBOARD_ZMQ_SUB="127.0.0.1:5554"
