@@ -29,7 +29,7 @@ app.include_router(routes.auth.router)
 @app.exception_handler(HTTPException)
 async def errorHandler(request, exc):
     resp = JSONResponse(
-        {"status": exc.status_code, "detail": str(exc.detail)},
+        {"code": exc.status_code, "msg": str(exc.detail)},
         status_code=exc.status_code,
     )
     if exc.status_code == 401:
