@@ -52,7 +52,7 @@ async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] =
             app.logger.info("Sending request...")
             await app.reqSocket.send_string(request)
             app.logger.info("Receiving response...")
-            string = await asyncio.wait_for(app.reqSocket.recv_string(), timeout=1.0)
+            string = await asyncio.wait_for(app.reqSocket.recv_string(), timeout=25.0)
             message = json.loads(string)
             return message
         except (Exception, asyncio.CancelledError) as e:
