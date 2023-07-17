@@ -4,7 +4,7 @@ import os
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 
 from nexus.core import constants, routes
@@ -36,6 +36,11 @@ async def errorHandler(request, exc):
         if request.cookies.get("loggedIn"):
             resp.delete_cookie("loggedIn")
     return resp
+
+
+@app.exception_handler(500)
+async def internalServerErrorHandler(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"code": 500, "msg": "Internal Server Error"})
 
 
 if __name__ == "__main__":
