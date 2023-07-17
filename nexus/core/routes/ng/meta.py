@@ -2,7 +2,9 @@
 # REF: https://github.com/tiangolo/fastapi/discussions/9709#discussioncomment-6449458
 # from __future__ import annotations
 
+import asyncio
 import json
+import traceback
 from typing import TYPE_CHECKING, Any, List, Optional, Union, overload
 
 import zmq
@@ -47,11 +49,15 @@ async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] =
 
     while True:
         try:
+            app.logger.info("Sending request...")
             await app.reqSocket.send_string(request)
-            message = json.loads(await app.reqSocket.recv_string())
+            app.logger.info("Receiving response...")
+            string = await asyncio.wait_for(app.reqSocket.recv_string(), timeout=1.0)
+            message = json.loads(string)
             return message
-        except (Exception, BaseException) as e:
-            app.logger.error(e)
+        except (Exception, asyncio.CancelledError) as e:
+            traceback.print_exc()
+            app.logger.error(e or e.__class__)
             if retries >= constants.REQUEST_RETRIES:
                 raise HTTPException(502, str(e))
 

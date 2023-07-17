@@ -21,6 +21,12 @@ class Nexus(FastAPI):
         self.context = context or zmq.asyncio.Context.instance()
         self._reqSocket: Optional[zmq.asyncio.Socket] = None
         self._subSocket: Optional[zmq.asyncio.Socket] = None
+        sockets = [self._reqSocket, self._subSocket]
+        timeout = 1000
+        for socket in sockets:
+            if not socket:
+                continue
+            socket.setsockopt(zmq.RCVTIMEO, timeout)
 
         # Auth related stuff
         self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
