@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse
 from nexus.core import constants
 from nexus.core.oauth import Guild, User
 from nexus.core.oauth.decorators import requireValidAuth
+from nexus.core.oauth.utils import validateAuth
 
 
 if TYPE_CHECKING:
@@ -168,3 +169,18 @@ async def prefixPut(request: Request, guildId: int, prefix: str):
         {"type": "prefix-add", "guildId": guildId, "prefix": prefix},
         request.session.get("userId"),
     )
+
+
+@router.get("/ping")
+async def ping(request: Request):
+    try:
+        botPing: dict[str, Any] = await requestBot(request.app, {"type": "ping"})  # type: ignore
+    except HTTPException:
+        botPing = {}
+    isLoggedIn = validateAuth(request.session.get("authToken") or {})
+    resp = JSONResponse({"isLoggedIn": isLoggedIn, "botPing": botPing.get("self")})
+    if isLoggedIn:
+        request.app.attachIsLoggedIn(resp)
+    else:
+        request.app.detachIsLoggedIn(resp)
+    return resp
