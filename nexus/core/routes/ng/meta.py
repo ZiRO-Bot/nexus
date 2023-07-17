@@ -1,13 +1,15 @@
-from __future__ import annotations
+# FIXME: __future__.annotations broke pydantics
+# REF: https://github.com/tiangolo/fastapi/discussions/9709#discussioncomment-6449458
+# from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any, List, Optional, Union, overload
 
-import discord
 import zmq
 import zmq.asyncio
 from fastapi import HTTPException
 from fastapi.routing import APIRouter
+from pydantic import BaseModel
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -26,16 +28,16 @@ router = APIRouter()
 
 
 @overload
-async def requestBot(app: Nexus, requestMessage: dict, userId: Optional[str] = None) -> list[Any]:
+async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] = None) -> list[Any]:
     ...
 
 
 @overload
-async def requestBot(app: Nexus, requestMessage: dict, userId: Optional[str] = None) -> dict[str, Any]:
+async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] = None) -> dict[str, Any]:
     ...
 
 
-async def requestBot(app: Nexus, requestMessage: dict, userId: Optional[str] = None) -> Union[dict[str, Any], list[Any]]:
+async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] = None) -> Union[dict[str, Any], list[Any]]:
     retries = 0
 
     if userId:
@@ -48,14 +50,13 @@ async def requestBot(app: Nexus, requestMessage: dict, userId: Optional[str] = N
             await app.reqSocket.send_string(request)
             message = json.loads(await app.reqSocket.recv_string())
             return message
-        except Exception as e:
+        except (Exception, BaseException) as e:
             app.logger.error(e)
             if retries >= constants.REQUEST_RETRIES:
                 raise HTTPException(502, str(e))
 
             if app._reqSocket:
-                app._reqSocket.setsockopt(zmq.LINGER, 0)
-                app._reqSocket.close()
+                app._reqSocket.close(linger=0)
             app.logger.info("Reconnecting to bot...")
             app.initRequestSocket()
             retries += 1
@@ -64,7 +65,7 @@ async def requestBot(app: Nexus, requestMessage: dict, userId: Optional[str] = N
 
 
 async def getchUser(request: Request) -> User:
-    app: Nexus = request.app
+    app: "Nexus" = request.app
     user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
@@ -82,7 +83,7 @@ async def getchGuilds(request: Request) -> List[Guild]:
         user = await getchUser(request)
         userId = user.id
 
-    app: Nexus = request.app
+    app: "Nexus" = request.app
 
     guilds = app.cachedGuilds.get(userId)
 
@@ -146,10 +147,10 @@ async def guildAuth(request: Request, guild_id: int):
     return "hello world"
 
 
-@router.get("/guildstats")
+@router.get("/guild/{guildId}/stats")
 @requireValidAuth
-async def guildStats(request: Request, guild_id: int):
-    return await requestBot(request.app, {"type": "guild", "id": guild_id}, request.session.get("userId"))
+async def guildStats(request: Request, guildId: int):
+    return await requestBot(request.app, {"type": "guild", "id": guildId}, request.session.get("userId"))
 
 
 @router.get("/botstats")
@@ -157,12 +158,26 @@ async def botstats(request: Request):
     return await requestBot(request.app, {"type": "bot-stats"})
 
 
-@router.put("/prefix")
+class Prefix(BaseModel):
+    prefix: str
+
+
+@router.put("/guild/{guildId}/prefix")
 @requireValidAuth
-async def prefixPut(request: Request, guildId: int, prefix: str):
+async def prefixPut(request: Request, guildId: int, prefix: Prefix):
     return await requestBot(
         request.app,
-        {"type": "prefix-add", "guildId": guildId, "prefix": prefix},
+        {"type": "prefix-add", "guildId": guildId, "prefix": prefix.prefix},
+        request.session.get("userId"),
+    )
+
+
+@router.delete("/guild/{guildId}/prefix")
+@requireValidAuth
+async def prefixDelete(request: Request, guildId: int, prefix: Prefix):
+    return await requestBot(
+        request.app,
+        {"type": "prefix-rm", "guildId": guildId, "prefix": prefix.prefix},
         request.session.get("userId"),
     )
 
