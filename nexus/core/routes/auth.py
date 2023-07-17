@@ -1,9 +1,13 @@
+from typing import Annotated, Union
+
+from fastapi import Header
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRouter
 
 from nexus.core.oauth import OAuth2Session
 from nexus.core.oauth.decorators import requireValidAuth
+from nexus.utils.discord_utils import generateInviteLink
 
 
 router = APIRouter()
@@ -26,4 +30,14 @@ async def logout(request: Request):
     resp = JSONResponse({"status": 200, "detail": "success"})
     if request.cookies.get("loggedIn"):
         resp.delete_cookie("loggedIn")
+    return resp
+
+
+@router.get("/invite")
+async def invite(request: Request):
+    inviteLink = generateInviteLink(request)
+    resp = RedirectResponse(inviteLink)
+    contentType: Union[str, None] = request.headers.get("content-type")
+    if contentType == "application/json":
+        resp = JSONResponse({"invite": inviteLink})
     return resp

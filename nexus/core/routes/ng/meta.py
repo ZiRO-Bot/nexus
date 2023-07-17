@@ -15,6 +15,7 @@ from nexus.core import constants
 from nexus.core.oauth import Guild, User
 from nexus.core.oauth.decorators import requireValidAuth
 from nexus.core.oauth.utils import validateAuth
+from nexus.utils.discord_utils import generateInviteLink
 
 
 if TYPE_CHECKING:
@@ -123,12 +124,7 @@ async def managedGuilds(request: Request):
         guildJson = guild.json()
         # for some reason 'guild.id in botGuilds' always returns False
         guildJson["bot"] = int(guild.id) in [int(i) for i in botGuilds]
-        guildJson["invite"] = discord.utils.oauth_url(
-            request.app.clientId,
-            permissions=discord.Permissions(4260883702),
-            guild=guild,
-            # redirect_uri=os.getenv("DISCORD_GUILD_REDIRECT_URI"),
-        )
+        guildJson["invite"] = generateInviteLink(request, guild)
         ret.append(guildJson)
 
     # show guilds that has the bot in it first, while also sort them by name
