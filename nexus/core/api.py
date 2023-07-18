@@ -36,6 +36,8 @@ class Nexus(FastAPI):
         self.scopes: tuple[str, ...] = ("identify", "guilds")
 
         # Cache
+        sessionExpiry = (14 if not self.debug else 1) * 24 * 60 * 60  # 14 days if not debug, otherwise 24 hour
+        self.sessionData = cache.ExpiringDict(maxAgeSeconds=sessionExpiry)  # auth data, containing user's keys and id
         self.cachedUser = cache.ExpiringDict(maxAgeSeconds=60)
         self.cachedGuilds = cache.ExpiringDict(maxAgeSeconds=60)
 
@@ -59,7 +61,7 @@ class Nexus(FastAPI):
             SessionMiddleware,
             session_cookie="user_session",
             secret_key=secretKey,
-            max_age=None if (self.debug) else 14 * 24 * 60 * 60,
+            max_age=sessionExpiry,
         )
 
         self.logger = getLogger("uvicorn")
