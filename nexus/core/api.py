@@ -27,6 +27,7 @@ class Nexus(FastAPI):
             if not socket:
                 continue
             socket.setsockopt(zmq.RCVTIMEO, timeout)
+            socket.setsockopt(zmq.IPV6, True)
 
         # Auth related stuff
         self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
