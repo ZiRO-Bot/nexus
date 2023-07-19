@@ -1,4 +1,3 @@
-import asyncio
 import datetime as dt
 import os
 import random
@@ -72,9 +71,13 @@ class Nexus(FastAPI):
 
         self.logger = getLogger("uvicorn")
 
-        asyncio.create_task(self.__ainit__())
+        self.initSockets()
 
-    async def __ainit__(self) -> None:
+    def initSockets(self) -> None:
+        self.connectReqSocket()
+        self.connectSubSocket()
+
+    def connectReqSocket(self):
         dest = os.getenv("DASHBOARD_ZMQ_REQ")
         if not dest:
             raise RuntimeError("Nexus requires at least a request socket to function properly!")
@@ -83,17 +86,13 @@ class Nexus(FastAPI):
         self.reqSocket.setsockopt(zmq.RCVTIMEO, constants.REQUEST_TIMEOUT)
         self.reqSocket.connect(f"tcp://{dest}")
 
+    def connectSubSocket(self):
         subDest = os.getenv("DASHBOARD_ZMQ_SUB")
         if subDest:
             self.subSocket = self.context.socket(zmq.SUB)
             self.subSocket.setsockopt(zmq.IPV6, True)
             self.subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
             self.subSocket.connect(f"tcp://{subDest}")
-
-    def reconnectReqSocket(self):
-        self.reqSocket.close(linger=0)
-        self.logger.info("Reconnecting to bot...")
-        self.reqSocket.connect(f"tcp://{os.getenv('DASHBOARD_ZMQ_REQ')}")
 
     def snowflake(self, datetime: Optional[dt.datetime] = None, /, *, high: bool = False) -> int:
         """Simplified version of how discord ID generated
