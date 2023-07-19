@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import traceback
-from typing import Optional
+from contextlib import suppress
+from typing import TYPE_CHECKING, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException, status
 from fastapi.responses import HTMLResponse, Response
@@ -9,7 +12,10 @@ from fastapi.routing import APIRouter
 from starlette.requests import Request
 
 from nexus.core.oauth.session import OAuth2Session
-from nexus.core.oauth.utils import validateAuth
+
+
+if TYPE_CHECKING:
+    from nexus.core.api import Nexus
 
 
 router = APIRouter()
@@ -17,6 +23,8 @@ router = APIRouter()
 
 @router.get("/callback")
 async def callback(request: Request, code: Optional[str] = None, state: Optional[str] = None):
+    app: Nexus = request.app
+
     def generateResponse(doReload: bool = True) -> Response:
         return HTMLResponse(
             f"""
@@ -42,19 +50,32 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
     if not code:
         return generateResponse(False)
 
+    newId = False
+    sessionId = request.session.get("sessionId")
+    if not sessionId:
+        sessionId = app.snowflake()
+        newId = True
+
+    data = {}
+    with suppress(KeyError):
+        data = app.sessionData.get(sessionId, {})
+
     try:
-        curToken = request.session.get("authToken") or {}
+        curToken = data.get("authToken") or {}
         async with request.app.session(state=state, request=request) as session:
             session: OAuth2Session
-            if not validateAuth(curToken):
+            if not app.validateAuth(sessionId):
                 curToken = await session.fetchToken(code=code, client_secret=request.app.clientSecret)
-                request.session["authToken"] = curToken
+                data["authToken"] = curToken
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
         return generateResponse(False)
 
-    request.session["userId"] = user.id
+    data["userId"] = user.id
+    app.sessionData[sessionId] = data
+    if newId:
+        request.session["sessionId"] = sessionId
     resp = generateResponse()
     request.app.attachIsLoggedIn(resp)
     return resp

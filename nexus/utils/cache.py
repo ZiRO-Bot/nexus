@@ -16,9 +16,7 @@ class ExpiringDict(dict):
 
     def verifyCache(self) -> None:
         curTime: float = time.monotonic()
-        toRemove: list = [
-            k for (k, (_, t)) in self.items() if curTime > (t + self.maxAgeSeconds)
-        ]
+        toRemove: list = [k for (k, (_, t)) in self.items() if curTime > (t + self.maxAgeSeconds)]
         for k in toRemove:
             del self[k]
 
@@ -35,6 +33,11 @@ class ExpiringDict(dict):
             return self.__getitem__(key)
         except KeyError:
             return fallback
+
+    def renew(self, key: Any) -> Any:
+        data = self[key]
+        self[key] = data
+        return data
 
     def getRaw(self, key: Any) -> Tuple[Any]:
         self.verifyCache()

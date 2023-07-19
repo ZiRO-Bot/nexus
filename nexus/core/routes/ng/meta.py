@@ -18,7 +18,6 @@ from starlette.responses import JSONResponse
 from nexus.core import constants
 from nexus.core.oauth import Guild, User
 from nexus.core.oauth.decorators import requireValidAuth
-from nexus.core.oauth.utils import validateAuth
 from nexus.utils.discord_utils import generateInviteLink
 
 
@@ -69,24 +68,28 @@ async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] =
 
 async def getchUser(request: Request) -> User:
     app: "Nexus" = request.app
-    user = app.cachedUser.get(request.session.get("userId", 0))
+    sessionId = request.session.get("sessionId", -1)
+    data = app.sessionData.renew(sessionId)
+    user = app.cachedUser.get(data.get("userId", 0))
 
     if not user:
-        async with app.session(token=request.session.get("authToken"), request=request) as session:
+        async with app.session(token=data.get("authToken"), request=request) as session:
             user = await session.identify()  # type: ignore
 
-            request.session["userId"] = user.id
+            data["userId"] = user.id
+            app.sessionData[sessionId] = data
 
     return user
 
 
 async def getchGuilds(request: Request) -> List[Guild]:
-    userId = request.session.get("userId", 0)
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
+    data = app.sessionData.renew(sessionId)
+    userId = data.get("userId")
     if not userId:
         user = await getchUser(request)
         userId = user.id
-
-    app: "Nexus" = request.app
 
     guilds = app.cachedGuilds.get(userId)
 
@@ -121,7 +124,11 @@ async def me(request: Request):
 async def managedGuilds(request: Request):
     """Get guilds that managed by the user"""
     guilds = await getchGuilds(request)
-    botGuilds: list[int] = await requestBot(request.app, {"type": "managed-guilds"}, request.session.get("userId"))
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
+    botGuilds: list[int] = await requestBot(
+        request.app, {"type": "managed-guilds", "userId": app.userIdFromSessionId(sessionId)}
+    )
     ret = []
 
     for guild in guilds:
@@ -153,7 +160,9 @@ async def guildAuth(request: Request, guild_id: int):
 @router.get("/guild/{guildId}/stats")
 @requireValidAuth
 async def guildStats(request: Request, guildId: int):
-    return await requestBot(request.app, {"type": "guild", "id": guildId}, request.session.get("userId"))
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
+    return await requestBot(request.app, {"type": "guild", "id": guildId, "userId": app.userIdFromSessionId(sessionId)})
 
 
 @router.get("/botstats")
@@ -168,30 +177,36 @@ class Prefix(BaseModel):
 @router.put("/guild/{guildId}/prefix")
 @requireValidAuth
 async def prefixPut(request: Request, guildId: int, prefix: Prefix):
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
     return await requestBot(
         request.app,
-        {"type": "prefix-add", "guildId": guildId, "prefix": prefix.prefix},
-        request.session.get("userId"),
+        {"type": "prefix-add", "guildId": guildId, "prefix": prefix.prefix, "userId": app.userIdFromSessionId(sessionId)},
     )
 
 
 @router.delete("/guild/{guildId}/prefix")
 @requireValidAuth
 async def prefixDelete(request: Request, guildId: int, prefix: Prefix):
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
     return await requestBot(
         request.app,
-        {"type": "prefix-rm", "guildId": guildId, "prefix": prefix.prefix},
-        request.session.get("userId"),
+        {"type": "prefix-rm", "guildId": guildId, "prefix": prefix.prefix, "userId": app.userIdFromSessionId(sessionId)},
     )
 
 
 @router.get("/ping")
 async def ping(request: Request):
+    app: "Nexus" = request.app
+    sessionId = request.session.get("sessionId", -1)
+
     try:
         botPing: dict[str, Any] = await requestBot(request.app, {"type": "ping"})  # type: ignore
     except HTTPException:
         botPing = {}
-    isLoggedIn = validateAuth(request.session.get("authToken") or {})
+
+    isLoggedIn = app.validateAuth(sessionId)
     resp = JSONResponse({"isLoggedIn": isLoggedIn, "botPing": botPing.get("self")})
     if isLoggedIn:
         request.app.attachIsLoggedIn(resp)
