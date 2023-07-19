@@ -1,7 +1,8 @@
+import asyncio
 import os
 import secrets
 from logging import getLogger
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import zmq
 import zmq.asyncio
@@ -16,18 +17,14 @@ from nexus.utils import cache
 
 
 class Nexus(FastAPI):
+    if TYPE_CHECKING:
+        reqSocket: zmq.asyncio.Socket
+        subSocket: Optional[zmq.asyncio.Socket]
+
     def __init__(self, context: Optional[zmq.asyncio.Context] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.context = context or zmq.asyncio.Context.instance()
-        self._reqSocket: Optional[zmq.asyncio.Socket] = None
-        self._subSocket: Optional[zmq.asyncio.Socket] = None
-        sockets = [self._reqSocket, self._subSocket]
-        timeout = 1000
-        for socket in sockets:
-            if not socket:
-                continue
-            socket.setsockopt(zmq.RCVTIMEO, timeout)
-            socket.setsockopt(zmq.IPV6, True)
+        self.subSocket = None
 
         # Auth related stuff
         self.clientId = int(os.getenv("DISCORD_CLIENT_ID", 0))
@@ -67,6 +64,29 @@ class Nexus(FastAPI):
 
         self.logger = getLogger("uvicorn")
 
+        asyncio.create_task(self.__ainit__())
+
+    async def __ainit__(self) -> None:
+        dest = os.getenv("DASHBOARD_ZMQ_REQ")
+        if not dest:
+            raise RuntimeError("Nexus requires at least a request socket to function properly!")
+        self.reqSocket = self.context.socket(zmq.REQ)
+        self.reqSocket.setsockopt(zmq.IPV6, True)
+        self.reqSocket.setsockopt(zmq.RCVTIMEO, constants.REQUEST_TIMEOUT)
+        self.reqSocket.connect(f"tcp://{dest}")
+
+        subDest = os.getenv("DASHBOARD_ZMQ_SUB")
+        if subDest:
+            self.subSocket = self.context.socket(zmq.SUB)
+            self.subSocket.setsockopt(zmq.IPV6, True)
+            self.subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
+            self.subSocket.connect(f"tcp://{subDest}")
+
+    def reconnectReqSocket(self):
+        self.reqSocket.close(linger=0)
+        self.logger.info("Reconnecting to bot...")
+        self.reqSocket.connect(f"tcp://{os.getenv('DASHBOARD_ZMQ_REQ')}")
+
     def getTokenUpdater(self, request: Optional[Request] = None):
         if not request:
             return None
@@ -90,40 +110,6 @@ class Nexus(FastAPI):
             tokenUpdater=self.getTokenUpdater(request),
         )
 
-    def initRequestSocket(self):
-        self._reqSocket = self.context.socket(zmq.REQ)
-        self._reqSocket.setsockopt(zmq.RCVTIMEO, constants.REQUEST_TIMEOUT)
-        self._reqSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_REQ", "127.0.0.1:5556"))
-
-    def initSubscriptionSocket(self):
-        self._subSocket = self.context.socket(zmq.SUB)
-        self._subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
-        self._subSocket.connect("tcp://" + os.getenv("DASHBOARD_ZMQ_SUB", "127.0.0.1:5554"))
-
-    def initSockets(self):
-        self.initRequestSocket()
-        self.initSubscriptionSocket()
-
-    @property
-    def isZMQAvailable(self) -> bool:
-        return self._reqSocket is not None or self._subSocket is not None
-
-    def _getSocket(self, socket: str) -> zmq.asyncio.Socket:
-        _socket = getattr(self, f"_{socket}Socket", None)
-        if not _socket:
-            self.initSockets()
-            _socket = getattr(self, socket)
-
-        return _socket
-
-    @property
-    def reqSocket(self) -> zmq.asyncio.Socket:
-        return self._getSocket("req")
-
-    @property
-    def subSocket(self) -> zmq.asyncio.Socket:
-        return self._getSocket("sub")
-
     def attachIsLoggedIn(self, response: Response):
         response.set_cookie("loggedIn", "yes", domain=os.getenv("DASHBOARD_HOSTNAME"), max_age=31556926)
 
@@ -131,11 +117,11 @@ class Nexus(FastAPI):
         response.delete_cookie("loggedIn", domain=os.getenv("DASHBOARD_HOSTNAME"))
 
     async def onStartup(self):
-        self.initSockets()
+        pass
 
-    def close(self):
+    async def closeSockets(self):
         self.logger.info("Closing sockets...")
-        sockets = (self._reqSocket, self._subSocket)
+        sockets = (self.reqSocket, self.subSocket)
         for socket in sockets:
             if not socket:
                 continue
@@ -146,5 +132,5 @@ class Nexus(FastAPI):
         self.context.term()
         self.logger.info("ZeroMQ has been closed")
 
-    def onShutdown(self):
-        self.close()
+    async def onShutdown(self):
+        await self.closeSockets()

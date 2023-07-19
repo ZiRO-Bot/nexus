@@ -7,7 +7,7 @@ import json
 import traceback
 from typing import TYPE_CHECKING, Any, List, Optional, Union, overload
 
-import zmq
+import zmq  # type: ignore
 import zmq.asyncio
 from fastapi import HTTPException
 from fastapi.routing import APIRouter
@@ -61,10 +61,7 @@ async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] =
             if retries >= constants.REQUEST_RETRIES:
                 raise HTTPException(502, str(e))
 
-            if app._reqSocket:
-                app._reqSocket.close(linger=0)
-            app.logger.info("Reconnecting to bot...")
-            app.initRequestSocket()
+            app.reconnectReqSocket()
             retries += 1
             app.logger.info("Retrying...")
             continue  # we let the loop retry the send request
