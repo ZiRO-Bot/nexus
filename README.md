@@ -29,6 +29,7 @@ DASHBOARD_IS_DEBUG=1
 # you should set this with strong passkey on prod
 # leaving it empty will make nexus generate a random key by default on prod (on DEBUG=0) on boot
 DASHBOARD_SECRET_KEY="you shall not pass"
+REDIS_URL="redis://localhost:6379"
 ```
 
 To run `nexus` you can simply run `pdm run start`

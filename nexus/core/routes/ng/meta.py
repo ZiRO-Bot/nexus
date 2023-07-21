@@ -68,25 +68,20 @@ async def requestBot(app: "Nexus", requestMessage: dict, userId: Optional[str] =
 
 async def getchUser(request: Request) -> User:
     app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
-    data = app.sessionData.renew(sessionId)
-    user = app.cachedUser.get(data.get("userId", 0))
+    user = app.cachedUser.get(request.session.get("userId", 0))
 
     if not user:
-        async with app.session(token=data.get("authToken"), request=request) as session:
+        async with app.session(token=request.session.get("authToken"), request=request) as session:
             user = await session.identify()  # type: ignore
 
-            data["userId"] = user.id
-            app.sessionData[sessionId] = data
+            request.session["userId"] = user.id
 
     return user
 
 
 async def getchGuilds(request: Request) -> List[Guild]:
     app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
-    data = app.sessionData.renew(sessionId)
-    userId = data.get("userId")
+    userId = request.session.get("userId")
     if not userId:
         user = await getchUser(request)
         userId = user.id
@@ -124,11 +119,7 @@ async def me(request: Request):
 async def managedGuilds(request: Request):
     """Get guilds that managed by the user"""
     guilds = await getchGuilds(request)
-    app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
-    botGuilds: list[int] = await requestBot(
-        request.app, {"type": "managed-guilds", "userId": app.userIdFromSessionId(sessionId)}
-    )
+    botGuilds: list[int] = await requestBot(request.app, {"type": "managed-guilds", "userId": request.session.get("userId")})
     ret = []
 
     for guild in guilds:
@@ -160,9 +151,7 @@ async def guildAuth(request: Request, guild_id: int):
 @router.get("/guild/{guildId}/stats")
 @requireValidAuth
 async def guildStats(request: Request, guildId: int):
-    app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
-    return await requestBot(request.app, {"type": "guild", "id": guildId, "userId": app.userIdFromSessionId(sessionId)})
+    return await requestBot(request.app, {"type": "guild", "id": guildId, "userId": request.session.get("userId")})
 
 
 @router.get("/botstats")
@@ -177,36 +166,31 @@ class Prefix(BaseModel):
 @router.put("/guild/{guildId}/prefix")
 @requireValidAuth
 async def prefixPut(request: Request, guildId: int, prefix: Prefix):
-    app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
     return await requestBot(
         request.app,
-        {"type": "prefix-add", "guildId": guildId, "prefix": prefix.prefix, "userId": app.userIdFromSessionId(sessionId)},
+        {"type": "prefix-add", "guildId": guildId, "prefix": prefix.prefix, "userId": request.session.get("userId")},
     )
 
 
 @router.delete("/guild/{guildId}/prefix")
 @requireValidAuth
 async def prefixDelete(request: Request, guildId: int, prefix: Prefix):
-    app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
     return await requestBot(
         request.app,
-        {"type": "prefix-rm", "guildId": guildId, "prefix": prefix.prefix, "userId": app.userIdFromSessionId(sessionId)},
+        {"type": "prefix-rm", "guildId": guildId, "prefix": prefix.prefix, "userId": request.session.get("userId")},
     )
 
 
 @router.get("/ping")
 async def ping(request: Request):
     app: "Nexus" = request.app
-    sessionId = request.session.get("sessionId", -1)
 
     try:
         botPing: dict[str, Any] = await requestBot(request.app, {"type": "ping"})  # type: ignore
     except HTTPException:
         botPing = {}
 
-    isLoggedIn = app.validateAuth(sessionId)
+    isLoggedIn = app.validateAuth(request.session.get("authToken", {}))
     resp = JSONResponse({"isLoggedIn": isLoggedIn, "botPing": botPing.get("self")})
     if isLoggedIn:
         request.app.attachIsLoggedIn(resp)

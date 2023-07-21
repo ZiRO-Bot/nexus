@@ -1,15 +1,11 @@
-import datetime as dt
 import os
-import random
 import secrets
 import time
-from contextlib import suppress
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Optional
 
 import zmq
 import zmq.asyncio
-from discord.utils import utcnow
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -18,9 +14,6 @@ from nexus.core import constants
 from nexus.core.middleware import SessionMiddleware
 from nexus.core.oauth import OAuth2Session
 from nexus.utils import cache
-
-
-NEXUS_EPOCH = 1689740330
 
 
 class Nexus(FastAPI):
@@ -41,8 +34,6 @@ class Nexus(FastAPI):
         self.scopes: tuple[str, ...] = ("identify", "guilds")
 
         # Cache
-        sessionExpiry = (14 if not self.debug else 1) * 24 * 60 * 60  # 14 days if not debug, otherwise 24 hour
-        self.sessionData = cache.ExpiringDict(maxAgeSeconds=sessionExpiry)  # auth data, containing user's keys and id
         self.cachedUser = cache.ExpiringDict(maxAgeSeconds=60)
         self.cachedGuilds = cache.ExpiringDict(maxAgeSeconds=60)
 
@@ -66,7 +57,7 @@ class Nexus(FastAPI):
             SessionMiddleware,
             session_cookie="user_session",
             secret_key=secretKey,
-            max_age=sessionExpiry,
+            max_age=constants.SESSION_EXPIRY if not self.debug else constants.SESSION_EXPIRY_DEBUG,
         )
 
         self.logger = getLogger("uvicorn")
@@ -94,21 +85,6 @@ class Nexus(FastAPI):
             self.subSocket.setsockopt(zmq.SUBSCRIBE, b"guild.update")
             self.subSocket.connect(f"tcp://{subDest}")
 
-    def snowflake(self, datetime: Optional[dt.datetime] = None, /, *, high: bool = False) -> int:
-        """Simplified version of how discord ID generated
-
-        REF: https://github.com/Rapptz/discord.py/blob/e870bb1335e3f824c83a40df4ea9b17f215fde63/discord/utils.py#L395-L422
-        """
-        if not datetime:
-            datetime = utcnow()
-        millis = int(datetime.timestamp() * 1000 - NEXUS_EPOCH)
-        return (millis << 22) + (2**22 - 1 if high else 0) + random.randint(0, 10)
-
-    def timeFromSnowflake(self, id: int, /) -> dt.datetime:
-        """REF: https://github.com/Rapptz/discord.py/blob/e870bb1335e3f824c83a40df4ea9b17f215fde63/discord/utils.py#L375-L392"""
-        millis = ((id >> 22) + NEXUS_EPOCH) / 1000
-        return dt.datetime.fromtimestamp(millis, tz=dt.timezone.utc)
-
     def getTokenUpdater(self, request: Optional[Request] = None):
         if not request:
             return None
@@ -118,27 +94,13 @@ class Nexus(FastAPI):
 
         return tokenUpdater
 
-    def validateAuth(self, sessionId: int) -> bool:
+    def validateAuth(self, authToken: dict[str, Any]) -> bool:
         # authToken = {'access_token': 'REDACTED', 'expires_in': 604800, 'refresh_token': 'REDACTED', 'scope': ['email', 'connections', 'identify', 'guilds', 'guilds.join'], 'token_type': 'Bearer', 'expires_at': 1678933659.2419164}
 
-        authToken = {}
-        with suppress(KeyError):
-            authToken = self.sessionData.renew(sessionId)
-            authToken = authToken["authToken"]
         return not time.time() - authToken.get("expires_at", 0) >= 0
 
-    def userIdFromSessionId(self, sessionId: int):
-        try:
-            data: dict[str, Any] = self.sessionData.renew(sessionId)
-            return data["userId"]
-        except KeyError:
-            raise HTTPException(502, "Session expired")
-
     def session(self, token=None, state=None, request: Optional[Request] = None) -> OAuth2Session:
-        currentToken = None
-        with suppress(KeyError, HTTPException):
-            id = getattr(request, "session", {}).get("sessionId", -1)
-            currentToken = self.sessionData.renew(id).get("authToken")
+        currentToken = getattr(request, "session", {}).get("authToken")
         return OAuth2Session(
             backendObj=self,
             token=token or currentToken,

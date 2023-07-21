@@ -15,10 +15,9 @@ load_dotenv()
 
 
 os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"  # Discord response with different scope for some reason
-DEBUG: bool = bool(os.getenv("DASHBOARD_IS_DEBUG", 0))
 
 
-app = Nexus(debug=DEBUG, docs_url=None, redoc_url=None)
+app = Nexus(debug=constants.DEBUG, docs_url=None, redoc_url=None)
 # app.include_router(routes.legacy.google.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.legacy.imagemanip.router, prefix=constants.PREFIX_V1)
 app.include_router(routes.ng.core.router, prefix=constants.PREFIX_V2)
@@ -44,4 +43,4 @@ async def internalServerErrorHandler(request: Request, exc: Exception):
 
 
 if __name__ == "__main__":
-    uvicorn.run("nexus.app:app", reload=DEBUG)
+    uvicorn.run("nexus.app:app", reload=constants.DEBUG)

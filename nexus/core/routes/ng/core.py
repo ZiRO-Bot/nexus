@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import traceback
-from contextlib import suppress
 from typing import TYPE_CHECKING, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException, status
@@ -50,32 +49,19 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
     if not code:
         return generateResponse(False)
 
-    newId = False
-    sessionId = request.session.get("sessionId")
-    if not sessionId:
-        sessionId = app.snowflake()
-        newId = True
-
-    data = {}
-    with suppress(KeyError):
-        data = app.sessionData.get(sessionId, {})
-
     try:
-        curToken = data.get("authToken") or {}
+        curToken = request.session.get("authToken") or {}
         async with request.app.session(state=state, request=request) as session:
             session: OAuth2Session
-            if not app.validateAuth(sessionId):
+            if not app.validateAuth(curToken):
                 curToken = await session.fetchToken(code=code, client_secret=request.app.clientSecret)
-                data["authToken"] = curToken
+                request.session["authToken"] = curToken
             user = await session.identify()
     except Exception:
         print(traceback.format_exc())
         return generateResponse(False)
 
-    data["userId"] = user.id
-    app.sessionData[sessionId] = data
-    if newId:
-        request.session["sessionId"] = sessionId
+    request.session["userId"] = user.id
     resp = generateResponse()
     request.app.attachIsLoggedIn(resp)
     return resp

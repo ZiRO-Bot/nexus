@@ -1,6 +1,5 @@
-from typing import Annotated, Union
+from typing import Union
 
-from fastapi import Header
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.routing import APIRouter

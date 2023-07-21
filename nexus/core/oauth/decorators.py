@@ -15,8 +15,7 @@ def requireValidAuth(func):
     @wraps(func)
     async def predicate(request: Request, *args, **kwargs):
         app: Nexus = request.app
-        sessionId = request.session.get("sessionId", -1)
-        valid = app.validateAuth(sessionId)
+        valid = app.validateAuth(request.session.get("authToken", {}))
         if not valid:
             raise HTTPException(401)
 
