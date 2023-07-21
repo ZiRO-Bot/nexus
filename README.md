@@ -18,6 +18,8 @@ DISCORD_CLIENT_SECRET=""
 DISCORD_REDIRECT_URI="http://127.0.0.1:8000/callback"
 DISCORD_GUILD_REDIRECT_URI="http://127.0.0.1:8000/guild-callback"
 DASHBOARD_FRONTEND_URI="http://127.0.0.1"
+# optional, if empty it'll use DASHBOARD_FRONTEND_URI by default, separated by comma
+DASHBOARD_FRONTEND_CORS="http://zibot.local,http://dev.zibot.local"
 DASHBOARD_HOSTNAME="127.0.0.1"  # mainly for cookie domain
 DASHBOARD_ZMQ_SUB="127.0.0.1:5554"
 # in docker-compose you can do something like this depending on your setup

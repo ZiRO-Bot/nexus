@@ -42,7 +42,7 @@ class Nexus(FastAPI):
         self.add_event_handler("shutdown", self.onShutdown)
         self.add_middleware(
             CORSMiddleware,
-            allow_origins=[self.frontendUri],
+            allow_origins=os.getenv("DASHBOARD_FRONTEND_CORS", self.frontendUri).split(","),
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
