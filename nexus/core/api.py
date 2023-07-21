@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import zmq
 import zmq.asyncio
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 

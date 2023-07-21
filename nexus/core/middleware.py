@@ -2,6 +2,7 @@ import json
 import os
 from base64 import b64decode, b64encode
 
+from cryptography.fernet import Fernet
 from itsdangerous import BadSignature
 from redis import asyncio as aioredis
 from starlette.datastructures import MutableHeaders
@@ -30,9 +31,14 @@ class SessionMiddleware(Origin):
             data = connection.cookies[self.session_cookie].encode("utf-8")
             try:
                 data = self.signer.unsign(data, max_age=self.max_age)
-                sessionId = json.loads(b64decode(data)).get("__ssid")
-                scope["session"] = json.loads(await self.redis.get(str(sessionId)) or "{}")
+                _internal = json.loads(b64decode(data))
+                sessionId = _internal.get("__ssid")
+                sessionKey = _internal.get("__sskey").encode("utf-8")
+                scope["session"] = json.loads(
+                    Fernet(sessionKey).decrypt(await self.redis.get(str(sessionId)) or b"").decode("utf-8")
+                )
                 scope["__ssid"] = sessionId
+                scope["__sskey"] = sessionKey
                 initial_session_was_empty = False
             except BadSignature:
                 scope["session"] = {}
@@ -41,13 +47,18 @@ class SessionMiddleware(Origin):
 
         async def send_wrapper(message: Message) -> None:
             if message["type"] == "http.response.start":
-                sessionId = scope.pop("__ssid", snowflake())
+                sessionId: int = scope.pop("__ssid", snowflake())
+                sessionKey: bytes = scope.pop("__sskey", Fernet.generate_key())
 
                 if scope["session"]:
                     # We have session data to persist.
 
-                    await self.redis.set(str(sessionId), json.dumps(scope["session"]), ex=self.max_age)
-                    cookieData = {"__ssid": sessionId}
+                    await self.redis.set(
+                        str(sessionId),
+                        Fernet(sessionKey).encrypt(json.dumps(scope["session"]).encode("utf-8")),
+                        ex=self.max_age,
+                    )
+                    cookieData = {"__ssid": sessionId, "__sskey": sessionKey.decode("utf-8")}
 
                     data = b64encode(json.dumps(cookieData).encode("utf-8"))
                     data = self.signer.sign(data)
