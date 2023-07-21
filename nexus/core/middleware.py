@@ -40,7 +40,7 @@ class SessionMiddleware(Origin):
                 scope["__ssid"] = sessionId
                 scope["__sskey"] = sessionKey
                 initial_session_was_empty = False
-            except BadSignature:
+            except (BadSignature, AttributeError):
                 scope["session"] = {}
         else:
             scope["session"] = {}
