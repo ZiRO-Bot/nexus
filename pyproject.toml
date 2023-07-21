@@ -1,6 +1,6 @@
 [project]
 name = "nexus"
-version = "2.0.0"
+version = "2.1.0"
 description = "Backend API for Z3R0"
 authors = [
     {name = "null2264", email = "palembani@gmail.com"}
