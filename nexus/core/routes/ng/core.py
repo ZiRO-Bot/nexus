@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import traceback
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect, WebSocketException, status
 from fastapi.responses import HTMLResponse, Response
@@ -67,53 +67,18 @@ async def callback(request: Request, code: Optional[str] = None, state: Optional
     return resp
 
 
-async def websocketSubcribeLoop(websocket: WebSocket, guildId: int):
+@router.websocket("/ws/{_type}/{_data}")
+async def ws(websocket: WebSocket, _type: str, _data: Any):
+    app: "Nexus" = websocket.app
+
+    if _type not in ("guild",):
+        raise WebSocketException(status.WS_1003_UNSUPPORTED_DATA)
+
+    conn = await app.websocketManager.connect(websocket, type=_type, data=_data)
     try:
         while True:
-            _, msg = await websocket.app.subSocket.recv_multipart()
-            decodedMsg = msg.decode()
-            if json.loads(decodedMsg).get("guildId") != guildId:
-                return
-            await websocket.send_text(f"{decodedMsg}")
-    except Exception as e:
-        print(e)
-
-
-@router.websocket("/ws")
-async def ws(websocket: WebSocket):
-    # Auth checker for WebSocket
-    scope = websocket.scope
-    scope["type"] = "http"
-    request = Request(scope=scope, receive=websocket._receive)
-    if not request.session.get("userId"):
-        scope["type"] = "websocket"  # WebSocketException would raise error without this
-        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-
-    await websocket.accept()
-    task: Optional[asyncio.Task] = None
-    try:
-        while True:
-            msg = await websocket.receive_json()
-            _type = msg.get("t")
-            if _type == "ping":
-                await websocket.send_json({"t": "pong"})
-            elif _type == "guild":
-                if task:
-                    continue
-
-                try:
-                    id = int(msg["i"])
-                except ValueError:
-                    await websocket.send_json(json.dumps({"e": "Invalid ID"}))
-                    continue
-
-                task = asyncio.create_task(websocketSubcribeLoop(websocket, id))
-                await websocket.send_json({"i": id})
-            else:
-                await websocket.send_json({"o": f"{msg}"})
-    except Exception as e:
-        if task:
-            task.cancel()
-
-        if not isinstance(e, WebSocketDisconnect):
-            await websocket.close()
+            # Just to keep the connection alive
+            await websocket.receive_json()
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        app.websocketManager.disconnect(conn)

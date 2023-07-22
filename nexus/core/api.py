@@ -13,6 +13,7 @@ from starlette.requests import Request
 from nexus.core import constants
 from nexus.core.middleware import SessionMiddleware
 from nexus.core.oauth import OAuth2Session
+from nexus.core.websocket import WebSocketManager
 from nexus.utils import cache
 
 
@@ -63,6 +64,8 @@ class Nexus(FastAPI):
         self.logger = getLogger("uvicorn")
 
         self.initSockets()
+
+        self.websocketManager = WebSocketManager(self)
 
     def initSockets(self) -> None:
         self.connectReqSocket()
