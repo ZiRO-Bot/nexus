@@ -27,10 +27,7 @@ async def login(request: Request):
 async def logout(request: Request):
     request.session.clear()
     resp = JSONResponse({"status": 200, "detail": "success"})
-    if request.cookies.get("loggedIn"):
-        request.app.attachIsLoggedIn(resp)
-    else:
-        request.app.detachIsLoggedIn(resp)
+    request.app.detachIsLoggedIn(resp)
     return resp
 
 
