@@ -121,7 +121,7 @@ class Nexus(FastAPI):
         response.set_cookie("loggedIn", "yes", domain=os.getenv("DASHBOARD_HOSTNAME"), max_age=31556926)
 
     def detachIsLoggedIn(self, response: Response):
-        response.delete_cookie("loggedIn", domain=os.getenv("DASHBOARD_HOSTNAME"))
+        response.set_cookie("loggedIn", "no", domain=os.getenv("DASHBOARD_HOSTNAME"), max_age=0, expires=0)
 
     async def onStartup(self):
         pass
