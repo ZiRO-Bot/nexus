@@ -149,7 +149,6 @@ async def guildAuth(request: Request, guild_id: int):
 
 
 @router.get("/guilds/{guildId}/stats")
-@router.get("/guild/{guildId}/stats")  # TODO: Delete later
 @requireValidAuth
 async def guildStats(request: Request, guildId: int):
     return await requestBot(request.app, {"type": "guild", "id": guildId, "userId": request.session.get("userId")})
@@ -165,7 +164,6 @@ class Prefix(BaseModel):
 
 
 @router.put("/guilds/{guildId}/prefix")
-@router.put("/guild/{guildId}/prefix")  # TODO: Delete later
 @requireValidAuth
 async def prefixPut(request: Request, guildId: int, prefix: Prefix):
     return await requestBot(
@@ -175,7 +173,6 @@ async def prefixPut(request: Request, guildId: int, prefix: Prefix):
 
 
 @router.delete("/guilds/{guildId}/prefix")
-@router.delete("/guild/{guildId}/prefix")  # TODO: Delete later
 @requireValidAuth
 async def prefixDelete(request: Request, guildId: int, prefix: Prefix):
     return await requestBot(
