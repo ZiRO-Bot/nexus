@@ -132,8 +132,7 @@ class Nexus(FastAPI):
         for socket in sockets:
             if not socket:
                 continue
-            socket.setsockopt(zmq.LINGER, 0)
-            socket.close()
+            socket.close(linger=1)
 
         self.logger.info("Terminating context...")
         self.context.term()
