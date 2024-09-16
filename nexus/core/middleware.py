@@ -1,6 +1,7 @@
 import json
 import os
 from base64 import b64decode, b64encode
+from typing import Union
 
 from cryptography.fernet import Fernet
 from itsdangerous import BadSignature
@@ -11,6 +12,11 @@ from starlette.requests import HTTPConnection
 from starlette.types import Message, Receive, Scope, Send
 
 from nexus.utils.session import snowflake
+
+
+def redisKey(key: Union[int, str]) -> str:
+    """Returns prefixed key for redis"""
+    return f"nexus-usr{key}"
 
 
 class SessionMiddleware(Origin):
@@ -35,7 +41,7 @@ class SessionMiddleware(Origin):
                 sessionId = _internal.get("__ssid")
                 sessionKey = _internal.get("__sskey").encode("utf-8")
                 scope["session"] = json.loads(
-                    Fernet(sessionKey).decrypt(await self.redis.get(str(sessionId)) or b"").decode("utf-8")
+                    Fernet(sessionKey).decrypt(await self.redis.get(redisKey(sessionId)) or b"").decode("utf-8")
                 )
                 scope["__ssid"] = sessionId
                 scope["__sskey"] = sessionKey
@@ -54,7 +60,7 @@ class SessionMiddleware(Origin):
                     # We have session data to persist.
 
                     await self.redis.set(
-                        str(sessionId),
+                        redisKey(sessionId),
                         Fernet(sessionKey).encrypt(json.dumps(scope["session"]).encode("utf-8")),
                         ex=self.max_age,
                     )
@@ -68,7 +74,7 @@ class SessionMiddleware(Origin):
                     headers.append("Set-Cookie", header_value)
                 elif not initial_session_was_empty:
                     # The session has been cleared.
-                    await self.redis.delete(str(sessionId))
+                    await self.redis.delete(redisKey(sessionId))
 
                     headers = MutableHeaders(scope=message)
                     header_value = self._construct_cookie(True)
