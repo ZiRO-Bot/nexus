@@ -6,7 +6,7 @@ Codename `nexus` is a backend API that act as a link between Z3R0 (`zibot`) and 
 
 ## Configuration
 
-> **Note**
+> [!NOTE]
 >
 > This project is managed using [`pdm`](https://github.com/pdm-project/pdm), please install it for easier usage
 
