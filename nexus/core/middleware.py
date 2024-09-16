@@ -3,7 +3,7 @@ import os
 from base64 import b64decode, b64encode
 from typing import Union
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from itsdangerous import BadSignature
 from redis import asyncio as aioredis
 from starlette.datastructures import MutableHeaders
@@ -46,7 +46,7 @@ class SessionMiddleware(Origin):
                 scope["__ssid"] = sessionId
                 scope["__sskey"] = sessionKey
                 initial_session_was_empty = False
-            except (BadSignature, AttributeError):
+            except (BadSignature, AttributeError, InvalidToken):
                 scope["session"] = {}
         else:
             scope["session"] = {}
